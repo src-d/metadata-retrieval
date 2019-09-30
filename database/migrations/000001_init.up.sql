@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS organizations_versioned (
   sum256 character varying(64) PRIMARY KEY,
-  versions text ARRAY,
+  versions integer ARRAY,
 
   avatar_url text,
   billing_email text,
@@ -27,7 +27,7 @@ CREATE INDEX IF NOT EXISTS organizations_versions ON organizations_versioned (ve
 
 CREATE TABLE IF NOT EXISTS users_versioned (
   sum256 character varying(64) PRIMARY KEY,
-  versions text ARRAY,
+  versions integer ARRAY,
 
   avatar_url text,
   bio text,
@@ -56,7 +56,7 @@ CREATE INDEX IF NOT EXISTS users_versions ON users_versioned (versions);
 
 CREATE TABLE IF NOT EXISTS repositories_versioned (
   sum256 character varying(64) PRIMARY KEY,
-  versions text ARRAY,
+  versions integer ARRAY,
   
   allow_merge_commit boolean,
   allow_rebase_merge boolean,
@@ -96,7 +96,7 @@ CREATE INDEX IF NOT EXISTS repositories_versions ON repositories_versioned (vers
 
 CREATE TABLE IF NOT EXISTS issues_versioned (
   sum256 character varying(64) PRIMARY KEY,
-  versions text ARRAY,
+  versions integer ARRAY,
 
   assignees text[] NOT NULL,
   body text,
@@ -126,7 +126,7 @@ CREATE INDEX IF NOT EXISTS issues_versions ON issues_versioned (versions);
 
 CREATE TABLE IF NOT EXISTS issue_comments_versioned (
   sum256 character varying(64) PRIMARY KEY,
-  versions text ARRAY,
+  versions integer ARRAY,
 
   author_association text,
   body text,
@@ -146,7 +146,7 @@ CREATE INDEX IF NOT EXISTS issue_comments_versions ON issue_comments_versioned (
 
 CREATE TABLE IF NOT EXISTS pull_requests_versioned (
   sum256 character varying(64) PRIMARY KEY,
-  versions text ARRAY,
+  versions integer ARRAY,
 
   additions bigint,
   assignees text[] NOT NULL,
@@ -196,7 +196,7 @@ CREATE INDEX IF NOT EXISTS pull_requests_versions ON pull_requests_versioned (ve
 
 CREATE TABLE IF NOT EXISTS pull_request_reviews_versioned (
   sum256 character varying(64) PRIMARY KEY,
-  versions text ARRAY,
+  versions integer ARRAY,
 
   body text,
   commit_id text,
@@ -222,7 +222,7 @@ pull_request_review_comments
 */
 CREATE TABLE IF NOT EXISTS pull_request_comments_versioned (
   sum256 character varying(64) PRIMARY KEY,
-  versions text ARRAY,
+  versions integer ARRAY,
 
   author_association text,
   body text,
