@@ -35,7 +35,7 @@ type DownloaderCmd struct {
 
 	DB      string `long:"db" description:"PostgreSQL URL connection string, e.g. postgres://user:password@127.0.0.1:5432/ghsync?sslmode=disable"`
 	Token   string `long:"token" short:"t" env:"GITHUB_TOKEN" description:"GitHub personal access token" required:"true"`
-	Version string `long:"version" description:"Version tag in the DB"`
+	Version int    `long:"version" description:"Version tag in the DB"`
 	Cleanup bool   `long:"cleanup" description:"Do a garbage collection on the DB, deleting data from other versions"`
 }
 
@@ -48,10 +48,6 @@ type Repository struct {
 }
 
 func (c *Repository) Execute(args []string) error {
-	if c.Version == "" {
-		c.Version = time.Now().Format("2006-01-02 15:04:05")
-	}
-
 	return c.ExecuteBody(
 		log.New(log.Fields{"owner": c.Owner, "repo": c.Name}),
 		func(httpClient *http.Client, downloader *github.Downloader) error {
@@ -67,10 +63,6 @@ type Organization struct {
 }
 
 func (c *Organization) Execute(args []string) error {
-	if c.Version == "" {
-		c.Version = time.Now().Format("2006-01-02 15:04:05")
-	}
-
 	return c.ExecuteBody(
 		log.New(log.Fields{"org": c.Name}),
 		func(httpClient *http.Client, downloader *github.Downloader) error {
@@ -87,10 +79,6 @@ type Ghsync struct {
 }
 
 func (c *Ghsync) Execute(args []string) error {
-	if c.Version == "" {
-		c.Version = time.Now().Format("2006-01-02 15:04:05")
-	}
-
 	return c.ExecuteBody(
 		log.New(log.Fields{"org": c.Name}),
 		func(httpClient *http.Client, downloader *github.Downloader) error {

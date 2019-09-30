@@ -65,14 +65,14 @@ func (s *Stdout) Rollback() error {
 	return nil
 }
 
-func (s *Stdout) Version(v string) {
+func (s *Stdout) Version(v int) {
 }
 
-func (s *Stdout) SetActiveVersion(v string) error {
+func (s *Stdout) SetActiveVersion(v int) error {
 	return nil
 }
 
-func (s *Stdout) Cleanup(currentVersion string) error {
+func (s *Stdout) Cleanup(currentVersion int) error {
 	return nil
 }
 

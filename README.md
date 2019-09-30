@@ -10,13 +10,13 @@ To use, create a personal GitHub token with the scopes **read:org**, **repo**.
 export GITHUB_TOKEN=xxxx
 
 # Info for individual repositories
-go run examples/cmd/*.go repo --version v0 --owner=src-d --name=metadata-retrieval
+go run examples/cmd/*.go repo --version 0 --owner=src-d --name=metadata-retrieval
 
 # Info for individual organization and its users (not including its repositories)
-go run examples/cmd/*.go org --version v0 --name=src-d
+go run examples/cmd/*.go org --version 0 --name=src-d
 
 # Info for organization and all its repositories (similar to ghsync deep)
-go run examples/cmd/*.go ghsync --version v0 --name=src-d --no-forks
+go run examples/cmd/*.go ghsync --version 0 --name=src-d --no-forks
 ```
 
 To use a postgres DB:
@@ -24,7 +24,7 @@ To use a postgres DB:
 ```shell
 docker-compose up -d
 
-go run examples/cmd/*.go repo --version v0 --owner=src-d --name=metadata-retrieval --db=postgres://user:password@127.0.0.1:5432/ghsync?sslmode=disable
+go run examples/cmd/*.go repo --version 0 --owner=src-d --name=metadata-retrieval --db=postgres://user:password@127.0.0.1:5432/ghsync?sslmode=disable
 
 docker-compose exec postgres psql postgres://user:password@127.0.0.1:5432/ghsync?sslmode=disable -c "select * from pull_request_reviews"
 ```
@@ -36,8 +36,8 @@ You can see the diff between the current DB schema and the ghsync schema here:
 <details><summary>diff</summary>
 
 ```diff
---- doc/1560510971_initial_schema.up.sql	2019-09-25 11:15:06.037702240 +0100
-+++ database/migrations/000001_init.up.sql	2019-09-25 12:01:21.829358293 +0100
+--- doc/1560510971_initial_schema.up.sql	2019-09-30 10:28:28.569403577 +0100
++++ database/migrations/000001_init.up.sql	2019-09-30 12:27:48.783414881 +0100
 @@ -1,267 +1,251 @@
  BEGIN;
  
@@ -45,7 +45,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 -  kallax_id serial NOT NULL PRIMARY KEY,
 +CREATE TABLE IF NOT EXISTS organizations_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
-+  versions text ARRAY,
++  versions integer ARRAY,
  
    avatar_url text,
    billing_email text,
@@ -80,7 +80,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 +
 +CREATE TABLE IF NOT EXISTS users_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
-+  versions text ARRAY,
++  versions integer ARRAY,
  
    avatar_url text,
    bio text,
@@ -118,7 +118,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
  
 +CREATE TABLE IF NOT EXISTS repositories_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
-+  versions text ARRAY,
++  versions integer ARRAY,
 +  
    allow_merge_commit boolean,
    allow_rebase_merge boolean,
@@ -183,7 +183,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 -  assignees jsonb NOT NULL,
 +CREATE TABLE IF NOT EXISTS issues_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
-+  versions text ARRAY,
++  versions integer ARRAY,
 +
 +  assignees text[] NOT NULL,
    body text,
@@ -216,7 +216,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 +
 +CREATE TABLE IF NOT EXISTS issue_comments_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
-+  versions text ARRAY,
++  versions integer ARRAY,
  
    author_association text,
    body text,
@@ -239,7 +239,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 +
 +CREATE TABLE IF NOT EXISTS pull_requests_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
-+  versions text ARRAY,
++  versions integer ARRAY,
  
    additions bigint,
 -  assignee_id bigint NOT NULL,
@@ -300,7 +300,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 +
 +CREATE TABLE IF NOT EXISTS pull_request_reviews_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
-+  versions text ARRAY,
++  versions integer ARRAY,
  
    body text,
    commit_id text,
@@ -328,7 +328,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 +*/
 +CREATE TABLE IF NOT EXISTS pull_request_comments_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
-+  versions text ARRAY,
++  versions integer ARRAY,
  
    author_association text,
    body text,

@@ -38,9 +38,9 @@ type storer interface {
 	Begin() error
 	Commit() error
 	Rollback() error
-	Version(v string)
-	SetActiveVersion(v string) error
-	Cleanup(currentVersion string) error
+	Version(v int)
+	SetActiveVersion(v int) error
+	Cleanup(currentVersion int) error
 }
 
 // Downloader fetches GitHub data using the v4 API
@@ -81,7 +81,7 @@ func NewStdoutDownloader(httpClient *http.Client) (*Downloader, error) {
 
 // DownloadRepository downloads the metadata for the given repository and all
 // its resources (issues, PRs, comments, reviews)
-func (d Downloader) DownloadRepository(ctx context.Context, owner string, name string, version string) error {
+func (d Downloader) DownloadRepository(ctx context.Context, owner string, name string, version int) error {
 	d.storer.Version(version)
 
 	var err error
@@ -806,7 +806,7 @@ func (d Downloader) downloadReviewComments(ctx context.Context, repositoryOwner,
 
 // DownloadOrganization downloads the metadata for the given organization and
 // its member users
-func (d Downloader) DownloadOrganization(ctx context.Context, name string, version string) error {
+func (d Downloader) DownloadOrganization(ctx context.Context, name string, version int) error {
 	d.storer.Version(version)
 
 	var err error
@@ -917,7 +917,7 @@ func (d Downloader) downloadUsers(ctx context.Context, name string, organization
 }
 
 // SetCurrent enables the given version as the current one accessible in the DB
-func (d Downloader) SetCurrent(version string) error {
+func (d Downloader) SetCurrent(version int) error {
 	err := d.storer.SetActiveVersion(version)
 	if err != nil {
 		return fmt.Errorf("failed to set current DB version to %v: %v", version, err)
@@ -926,7 +926,7 @@ func (d Downloader) SetCurrent(version string) error {
 }
 
 // Cleanup deletes from the DB all records that do not belong to the currentVersion
-func (d Downloader) Cleanup(currentVersion string) error {
+func (d Downloader) Cleanup(currentVersion int) error {
 	err := d.storer.Cleanup(currentVersion)
 	if err != nil {
 		return fmt.Errorf("failed to do cleanup for DB version %v: %v", currentVersion, err)

@@ -13,7 +13,7 @@ import (
 type DB struct {
 	*sql.DB
 	tx *sql.Tx
-	v  string
+	v  int
 }
 
 func (s *DB) Begin() error {
@@ -30,7 +30,7 @@ func (s *DB) Rollback() error {
 	return s.tx.Rollback()
 }
 
-func (s *DB) Version(v string) {
+func (s *DB) Version(v int) {
 	s.v = v
 }
 
@@ -47,6 +47,8 @@ const (
 
 var tables = []string{
 	"organizations_versioned",
+	"users_versioned",
+	"repositories_versioned",
 	"issues_versioned",
 	"issue_comments_versioned",
 	"pull_requests_versioned",
@@ -54,62 +56,62 @@ var tables = []string{
 	"pull_request_comments_versioned",
 }
 
-func (s *DB) SetActiveVersion(v string) error {
+func (s *DB) SetActiveVersion(v int) error {
 	// TODO: for some reason the normal parameter interpolation $1 fails with
 	// pq: got 1 parameters but the statement requires 0
 
 	_, err := s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW organizations AS
 	SELECT %s
-	FROM organizations_versioned WHERE '%s' = ANY(versions)`, organizationsCols, v))
+	FROM organizations_versioned WHERE %v = ANY(versions)`, organizationsCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW organizations: %v", err)
 	}
 
 	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW users AS
 	SELECT %s
-	FROM users_versioned WHERE '%s' = ANY(versions)`, usersCols, v))
+	FROM users_versioned WHERE %v = ANY(versions)`, usersCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW users: %v", err)
 	}
 
 	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW repositories AS
 	SELECT %s
-	FROM repositories_versioned WHERE '%s' = ANY(versions)`, repositoriesCols, v))
+	FROM repositories_versioned WHERE %v = ANY(versions)`, repositoriesCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW repositories: %v", err)
 	}
 
 	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW issues AS
 	SELECT %s
-	FROM issues_versioned WHERE '%s' = ANY(versions)`, issuesCols, v))
+	FROM issues_versioned WHERE %v = ANY(versions)`, issuesCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW issues: %v", err)
 	}
 
 	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW issue_comments AS
 	SELECT %s
-	FROM issue_comments_versioned WHERE '%s' = ANY(versions)`, issueCommentsCols, v))
+	FROM issue_comments_versioned WHERE %v = ANY(versions)`, issueCommentsCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW issue_comments: %v", err)
 	}
 
 	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW pull_requests AS
 	SELECT %s
-	FROM pull_requests_versioned WHERE '%s' = ANY(versions)`, pullRequestsCol, v))
+	FROM pull_requests_versioned WHERE %v = ANY(versions)`, pullRequestsCol, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW pull_requests: %v", err)
 	}
 
 	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW pull_request_reviews AS
 	SELECT %s
-	FROM pull_request_reviews_versioned WHERE '%s' = ANY(versions)`, pullRequestReviewsCols, v))
+	FROM pull_request_reviews_versioned WHERE %v = ANY(versions)`, pullRequestReviewsCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW pull_request_reviews: %v", err)
 	}
 
 	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW pull_request_comments AS
 	SELECT %s
-	FROM pull_request_comments_versioned WHERE '%s' = ANY(versions)`, pullRequestReviewCommentsCols, v))
+	FROM pull_request_comments_versioned WHERE %v = ANY(versions)`, pullRequestReviewCommentsCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW pull_request_comments: %v", err)
 	}
@@ -117,17 +119,17 @@ func (s *DB) SetActiveVersion(v string) error {
 	return nil
 }
 
-func (s *DB) Cleanup(currentVersion string) error {
+func (s *DB) Cleanup(currentVersion int) error {
 	for _, table := range tables {
 		// Delete all entries that do not belong to currentVersion
-		_, err := s.DB.Exec(fmt.Sprintf(`DELETE FROM %s WHERE '%s' <> ALL(versions)`, table, currentVersion))
+		_, err := s.DB.Exec(fmt.Sprintf(`DELETE FROM %s WHERE %v <> ALL(versions)`, table, currentVersion))
 		if err != nil {
 			return fmt.Errorf("failed in cleanup method, delete: %v", err)
 		}
 
 		// All remaining entries belong to currentVersion, replace the list of versions
 		// with an array of 1 entry
-		_, err = s.DB.Exec(fmt.Sprintf(`UPDATE %s SET versions = array['%s']`, table, currentVersion))
+		_, err = s.DB.Exec(fmt.Sprintf(`UPDATE %s SET versions = array[%v]`, table, currentVersion))
 		if err != nil {
 			return fmt.Errorf("failed in cleanup method, update: %v", err)
 		}
@@ -140,11 +142,11 @@ func (s *DB) SaveOrganization(organization *graphql.Organization) error {
 	statement := fmt.Sprintf(
 		`INSERT INTO organizations_versioned
 		(sum256, versions, %s)
-		VALUES ($1, array[$2], $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
 			$15, $16, $17, $18, $19)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(organizations_versioned.versions, $2)`,
+		SET versions = array_append(organizations_versioned.versions, $20)`,
 		organizationsCols)
 
 	st := fmt.Sprintf("%+v", organization)
@@ -153,7 +155,7 @@ func (s *DB) SaveOrganization(organization *graphql.Organization) error {
 
 	_, err := s.tx.Exec(statement,
 		hashString,
-		s.v,
+		pq.Array([]int{s.v}),
 
 		organization.AvatarUrl, // avatar_url text,
 		// TODO
@@ -175,10 +177,12 @@ func (s *DB) SaveOrganization(organization *graphql.Organization) error {
 		//organization.RequiresTwoFactorAuthentication, // two_factor_requirement_enabled boolean,
 		false,
 		organization.UpdatedAt, // updated_at timestamptz,
+
+		s.v,
 	)
 
 	if err != nil {
-		return fmt.Errorf("saveRepository: %v", err)
+		return fmt.Errorf("SaveOrganization: %v", err)
 	}
 	return nil
 }
@@ -187,11 +191,11 @@ func (s *DB) SaveUser(user *graphql.UserExtended) error {
 	statement := fmt.Sprintf(
 		`INSERT INTO users_versioned
 		(sum256, versions, %s)
-		VALUES ($1, array[$2], $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
 			$15, $16, $17, $18, $19, $20, $21, $22, $23)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(users_versioned.versions, $2)`,
+		SET versions = array_append(users_versioned.versions, $24)`,
 		usersCols)
 
 	st := fmt.Sprintf("%+v", user)
@@ -200,7 +204,7 @@ func (s *DB) SaveUser(user *graphql.UserExtended) error {
 
 	_, err := s.tx.Exec(statement,
 		hashString,
-		s.v,
+		pq.Array([]int{s.v}),
 
 		user.AvatarUrl, // avatar_url text,
 		user.Bio,       // bio text,
@@ -225,6 +229,8 @@ func (s *DB) SaveUser(user *graphql.UserExtended) error {
 		user.IsSiteAdmin,                  // site_admin boolean,
 		user.TotalPrivateRepos.TotalCount, // total_private_repos bigint,
 		user.UpdatedAt,                    // updated_at timestamptz,
+
+		s.v,
 	)
 
 	if err != nil {
@@ -237,12 +243,12 @@ func (s *DB) SaveRepository(repository *graphql.RepositoryFields, topics []strin
 	statement := fmt.Sprintf(
 		`INSERT INTO repositories_versioned
 		(sum256, versions, %s)
-		VALUES ($1, array[$2], $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
 			$15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29,
 			$30, $31, $32, $33, $34)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(repositories_versioned.versions, $2)`,
+		SET versions = array_append(repositories_versioned.versions, $35)`,
 		repositoriesCols)
 
 	st := fmt.Sprintf("%+v %v", repository, topics)
@@ -251,7 +257,7 @@ func (s *DB) SaveRepository(repository *graphql.RepositoryFields, topics []strin
 
 	_, err := s.tx.Exec(statement,
 		hashString,
-		s.v,
+		pq.Array([]int{s.v}),
 
 		repository.MergeCommitAllowed,    // allow_merge_commit boolean
 		repository.RebaseMergeAllowed,    // allow_rebase_merge boolean
@@ -285,6 +291,8 @@ func (s *DB) SaveRepository(repository *graphql.RepositoryFields, topics []strin
 		pq.Array(topics),                 // topics text[] NOT NULL
 		repository.UpdatedAt,             // updated_at timestamptz
 		repository.Watchers.TotalCount,   // watchers_count bigint
+
+		s.v,
 	)
 
 	if err != nil {
@@ -308,11 +316,11 @@ func (s *DB) SaveIssue(repositoryOwner, repositoryName string, issue *graphql.Is
 	statement := fmt.Sprintf(
 		`INSERT INTO issues_versioned
 		(sum256, versions, %s)
-		VALUES ($1, array[$2], $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
 			$15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(issues_versioned.versions, $2)`,
+		SET versions = array_append(issues_versioned.versions, $25)`,
 		issuesCols)
 
 	st := fmt.Sprintf("%v %v %+v %v %v", repositoryOwner, repositoryName, issue, assignees, labels)
@@ -329,7 +337,7 @@ func (s *DB) SaveIssue(repositoryOwner, repositoryName string, issue *graphql.Is
 
 	_, err := s.tx.Exec(statement,
 		hashString,
-		s.v,
+		pq.Array([]int{s.v}),
 
 		pq.Array(assignees),          // assignees text[] NOT NULL,
 		issue.Body,                   // body text,
@@ -353,6 +361,8 @@ func (s *DB) SaveIssue(repositoryOwner, repositoryName string, issue *graphql.Is
 		issue.UpdatedAt,              // updated_at timestamptz,
 		issue.Author.User.DatabaseId, // user_id bigint NOT NULL,
 		issue.Author.Login,           // user_login text NOT NULL,
+
+		s.v,
 	)
 
 	if err != nil {
@@ -364,10 +374,10 @@ func (s *DB) SaveIssue(repositoryOwner, repositoryName string, issue *graphql.Is
 func (s *DB) SaveIssueComment(repositoryOwner, repositoryName string, issueNumber int, comment *graphql.IssueComment) error {
 	statement := fmt.Sprintf(`INSERT INTO issue_comments_versioned
 		(sum256, versions, %s)
-		VALUES ($1, array[$2], $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(issue_comments_versioned.versions, $2)`,
+		SET versions = array_append(issue_comments_versioned.versions, $15)`,
 		issueCommentsCols)
 
 	st := fmt.Sprintf("%v %v %v %+v", repositoryOwner, repositoryName, issueNumber, comment)
@@ -376,7 +386,7 @@ func (s *DB) SaveIssueComment(repositoryOwner, repositoryName string, issueNumbe
 
 	_, err := s.tx.Exec(statement,
 		hashString,
-		s.v,
+		pq.Array([]int{s.v}),
 
 		comment.AuthorAssociation,      // author_association text,
 		comment.Body,                   // body text,
@@ -390,6 +400,8 @@ func (s *DB) SaveIssueComment(repositoryOwner, repositoryName string, issueNumbe
 		comment.UpdatedAt,              // updated_at timestamptz,
 		comment.Author.User.DatabaseId, // user_id bigint NOT NULL,
 		comment.Author.Login,           // user_login text NOT NULL,
+
+		s.v,
 	)
 
 	if err != nil {
@@ -402,12 +414,12 @@ func (s *DB) SavePullRequest(repositoryOwner, repositoryName string, pr *graphql
 	statement := fmt.Sprintf(
 		`INSERT INTO pull_requests_versioned
 		(sum256, versions, %s)
-		VALUES ($1, array[$2], $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
 			$15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29,
 			$30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(pull_requests_versioned.versions, $2)`,
+		SET versions = array_append(pull_requests_versioned.versions, $45)`,
 		pullRequestsCol)
 
 	st := fmt.Sprintf("%v %v %+v %v %v", repositoryOwner, repositoryName, pr, assignees, labels)
@@ -416,7 +428,7 @@ func (s *DB) SavePullRequest(repositoryOwner, repositoryName string, pr *graphql
 
 	_, err := s.tx.Exec(statement,
 		hashString,
-		s.v,
+		pq.Array([]int{s.v}),
 
 		pr.Additions,                               // additions bigint,
 		pq.Array(assignees),                        // assignees text[] NOT NULL,
@@ -460,6 +472,8 @@ func (s *DB) SavePullRequest(repositoryOwner, repositoryName string, pr *graphql
 		pr.UpdatedAt,                // updated_at timestamptz,
 		pr.Author.DatabaseId,        // user_id bigint NOT NULL,
 		pr.Author.Login,             // user_login text NOT NULL,
+
+		s.v,
 	)
 
 	if err != nil {
@@ -476,10 +490,10 @@ func (s *DB) SavePullRequestComment(repositoryOwner, repositoryName string, pull
 func (s *DB) SavePullRequestReview(repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
 	statement := fmt.Sprintf(`INSERT INTO pull_request_reviews_versioned
 		(sum256, versions, %s)
-		VALUES ($1, array[$2], $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(pull_request_reviews_versioned.versions, $2)`,
+		SET versions = array_append(pull_request_reviews_versioned.versions, $15)`,
 		pullRequestReviewsCols)
 
 	st := fmt.Sprintf("%v %v %v %+v", repositoryOwner, repositoryName, pullRequestNumber, review)
@@ -488,7 +502,7 @@ func (s *DB) SavePullRequestReview(repositoryOwner, repositoryName string, pullR
 
 	_, err := s.tx.Exec(statement,
 		hashString,
-		s.v,
+		pq.Array([]int{s.v}),
 
 		review.Body,                   // body text,
 		review.Commit.Oid,             // commit_id text,
@@ -502,6 +516,8 @@ func (s *DB) SavePullRequestReview(repositoryOwner, repositoryName string, pullR
 		review.SubmittedAt,            // submitted_at timestamptz,
 		review.Author.User.DatabaseId, // user_id bigint NOT NULL,
 		review.Author.Login,           // user_login text NOT NULL,
+
+		s.v,
 	)
 
 	if err != nil {
@@ -513,11 +529,11 @@ func (s *DB) SavePullRequestReview(repositoryOwner, repositoryName string, pullR
 func (s *DB) SavePullRequestReviewComment(repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewId int, comment *graphql.PullRequestReviewComment) error {
 	statement := fmt.Sprintf(`INSERT INTO pull_request_comments_versioned
 		(sum256, versions, %s)
-		VALUES ($1, array[$2], $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
 			$15, $16, $17, $18, $19, $20, $21, $22)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(pull_request_comments_versioned.versions, $2)`,
+		SET versions = array_append(pull_request_comments_versioned.versions, $23)`,
 		pullRequestReviewCommentsCols)
 
 	st := fmt.Sprintf("%v %v %v %v %+v", repositoryOwner, repositoryName, pullRequestNumber, pullRequestReviewId, comment)
@@ -526,7 +542,7 @@ func (s *DB) SavePullRequestReviewComment(repositoryOwner, repositoryName string
 
 	_, err := s.tx.Exec(statement,
 		hashString,
-		s.v,
+		pq.Array([]int{s.v}),
 
 		comment.AuthorAssociation, // author_association text,
 		comment.Body,              // body text,
@@ -549,6 +565,8 @@ func (s *DB) SavePullRequestReviewComment(repositoryOwner, repositoryName string
 		comment.UpdatedAt,          // updated_at timestamptz,
 		comment.Author.DatabaseId,  // user_id bigint NOT NULL,
 		comment.Author.Login,       // user_login text NOT NULL,
+
+		s.v,
 	)
 
 	if err != nil {
