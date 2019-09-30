@@ -545,15 +545,7 @@ func (d Downloader) downloadPullRequestAssignees(ctx context.Context, pr *graphq
 	variables := map[string]interface{}{
 		"id": githubv4.ID(pr.Id),
 
-		"assigneesPage":                 githubv4.Int(assigneesPage),
-		"issueCommentsPage":             githubv4.Int(issueCommentsPage),
-		"issuesPage":                    githubv4.Int(issuesPage),
-		"labelsPage":                    githubv4.Int(labelsPage),
-		"pullRequestReviewCommentsPage": githubv4.Int(pullRequestReviewCommentsPage),
-		"pullRequestReviewsPage":        githubv4.Int(pullRequestReviewsPage),
-		"pullRequestsPage":              githubv4.Int(pullRequestsPage),
-		"repositoryTopicsPage":          githubv4.Int(repositoryTopicsPage),
-
+		"assigneesPage":   githubv4.Int(assigneesPage),
 		"assigneesCursor": (*githubv4.String)(nil),
 	}
 
