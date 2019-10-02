@@ -1,0 +1,9 @@
+# Output of the go coverage tool
+*.out
+coverage.txt
+
+# .vscode workspace settings
+.vscode
+
+# Ignore CI folder downloaded through make
+.ci
