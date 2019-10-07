@@ -8,16 +8,18 @@ branches:
     - master
     - /^v\d+\.\d+(\.\d+)?(-\S*)?$/
 
-stages:
-  - name: tests
-
-os:
-  - linux
-  - osx
-
 jobs:
   include:
-    - stage: tests
-      name: 'Unit Tests'
+    - stage: test
+      name: "Integration tests"
+      os: linux
+      services: docker
+      script:
+        # only linux supports docker https://docs.travis-ci.com/user/docker/ => tests with docker skipped programmatically ~ OS
+        - docker-compose up -d
+        - make test-coverage codecov
+    - stage: test
+      name: "Integration tests"
+      os: osx
       script:
         - make test-coverage codecov

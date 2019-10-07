@@ -202,6 +202,8 @@ func (s *DB) SaveUser(user *graphql.UserExtended) error {
 	hash := sha256.Sum256([]byte(st))
 	hashString := fmt.Sprintf("%x", hash)
 
+	fmt.Printf("%+v\n", user)
+
 	_, err := s.tx.Exec(statement,
 		hashString,
 		pq.Array([]int{s.v}),
