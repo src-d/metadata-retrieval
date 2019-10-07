@@ -101,16 +101,16 @@ func (s *Memory) Rollback() error {
 }
 
 // Version is a noop method at the moment
-func (s *Memory) Version(v string) {
+func (s *Memory) Version(v int) {
 }
 
 // SetActiveVersion is a noop method at the moment
-func (s *Memory) SetActiveVersion(v string) error {
+func (s *Memory) SetActiveVersion(v int) error {
 	return nil
 }
 
 // Cleanup is a noop method at the moment
-func (s *Memory) Cleanup(currentVersion string) error {
+func (s *Memory) Cleanup(currentVersion int) error {
 	return nil
 }
 

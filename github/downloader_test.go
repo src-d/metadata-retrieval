@@ -18,7 +18,7 @@ import (
 type RepositoryTest struct {
 	Owner           string `json:"owner"`
 	Repository      string `json:"repository"`
-	Version         string `json:"version"`
+	Version         int    `json:"version"`
 	URL             string `json:"url"`
 	CreatedAt       string `json:"createdAt"`
 	IsPrivate       bool   `json:"isPrivate"`
@@ -31,7 +31,7 @@ type RepositoryTest struct {
 // OrganizationTest struct to hold a test oracle for an organization
 type OrganizationTest struct {
 	Org               string `json:"org"`
-	Version           string `json:"version"`
+	Version           int    `json:"version"`
 	URL               string `json:"url"`
 	CreatedAt         string `json:"createdAt"`
 	PublicRepos       int    `json:"publicRepos"`

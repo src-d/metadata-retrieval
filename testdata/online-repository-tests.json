@@ -4,7 +4,7 @@
         {
             "owner": "git-fixtures",
             "repository": "basic",
-            "version": "0",
+            "version": 0,
             "url": "https://github.com/git-fixtures/basic",
             "createdAt": "2015-03-31 11:42:21 +0000 UTC",
             "isPrivate": false,
@@ -16,7 +16,7 @@
         {
             "owner": "git-fixtures",
             "repository": "symlinks",
-            "version": "0",
+            "version": 0,
             "url": "https://github.com/git-fixtures/symlinks",
             "createdAt": "2017-06-18 17:57:27 +0000 UTC",
             "isPrivate": false,
@@ -28,7 +28,7 @@
         {
             "owner": "git-fixtures",
             "repository": "submodule",
-            "version": "0",
+            "version": 0,
             "url": "https://github.com/git-fixtures/submodule",
             "createdAt": "2017-02-12 17:18:40 +0000 UTC",
             "isPrivate": false,
@@ -40,7 +40,7 @@
         {
             "owner": "git-fixtures",
             "repository": "releases",
-            "version": "0",
+            "version": 0,
             "url": "https://github.com/git-fixtures/releases",
             "createdAt": "2016-11-06 21:27:46 +0000 UTC",
             "isPrivate": false,
@@ -52,7 +52,7 @@
         {
             "owner": "git-fixtures",
             "repository": "tags",
-            "version": "0",
+            "version": 0,
             "url": "https://github.com/git-fixtures/tags",
             "createdAt": "2016-09-21 19:15:12 +0000 UTC",
             "isPrivate": false,
@@ -64,7 +64,7 @@
         {
             "owner": "git-fixtures",
             "repository": "empty",
-            "version": "0",
+            "version": 0,
             "url": "https://github.com/git-fixtures/empty",
             "createdAt": "2016-08-25 12:48:01 +0000 UTC",
             "isPrivate": false,
@@ -76,7 +76,7 @@
         {
             "owner": "git-fixtures",
             "repository": "small-several-contributors",
-            "version": "0",
+            "version": 0,
             "url": "https://github.com/git-fixtures/small-several-contributors",
             "createdAt": "2016-02-23 18:58:59 +0000 UTC",
             "isPrivate": false,
@@ -88,7 +88,7 @@
         {
             "owner": "git-fixtures",
             "repository": "small-several-contributors-with-prs",
-            "version": "0",
+            "version": 0,
             "url": "https://github.com/git-fixtures/small-several-contributors-with-prs",
             "createdAt": "2016-02-23 19:20:39 +0000 UTC",
             "isPrivate": false,

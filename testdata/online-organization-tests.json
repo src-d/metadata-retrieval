@@ -3,7 +3,7 @@
     [
         {
             "org": "git-fixtures",
-            "version": "0",
+            "version": 0,
             "url": "https://github.com/git-fixtures",
             "createdAt": "2016-02-23 18:57:27 +0000 UTC",
             "publicRepos": 8,
