@@ -7,3 +7,6 @@ coverage.txt
 
 # Ignore CI folder downloaded through make
 .ci
+
+# MacOS hidden file
+.DS_Store

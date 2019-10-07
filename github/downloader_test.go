@@ -47,7 +47,7 @@ type OnlineTests struct {
 
 func checkToken(t *testing.T) {
 	if os.Getenv("GITHUB_TOKEN") == "" {
-		t.Skip("GITHUB_TOKEN is not set")
+		t.Fatal("GITHUB_TOKEN is not set")
 		return
 	}
 }
