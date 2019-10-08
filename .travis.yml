@@ -6,6 +6,11 @@ go:
 stages:
   - name: tests
 
+os:
+  - linux
+  - osx
+  - windows
+
 jobs:
   include:
     - stage: tests

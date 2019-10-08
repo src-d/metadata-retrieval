@@ -55,7 +55,7 @@ func (s *Memory) SaveIssue(repositoryOwner, repositoryName string, issue *graphq
 
 // SaveIssueComment noop
 func (s *Memory) SaveIssueComment(repositoryOwner, repositoryName string, issueNumber int, comment *graphql.IssueComment) error {
-	log.Infof("  issue comment data fetched by %s at %v: %q\n", comment.Author.Login, comment.CreatedAt, trim(comment.Body))
+	log.Infof(" \tissue comment data fetched by %s at %v: %q\n", comment.Author.Login, comment.CreatedAt, trim(comment.Body))
 	return nil
 }
 
@@ -68,20 +68,20 @@ func (s *Memory) SavePullRequest(repositoryOwner, repositoryName string, pr *gra
 
 // SavePullRequestComment appends an PR comment to the PR comment list in memory
 func (s *Memory) SavePullRequestComment(repositoryOwner, repositoryName string, pullRequestNumber int, comment *graphql.IssueComment) error {
-	log.Infof("  pr comment data fetched by %s at %v: %q\n", comment.Author.Login, comment.CreatedAt, trim(comment.Body))
+	log.Infof("\tpr comment data fetched by %s at %v: %q\n", comment.Author.Login, comment.CreatedAt, trim(comment.Body))
 	s.PRComments = append(s.PRComments, comment)
 	return nil
 }
 
 // SavePullRequestReview noop
 func (s *Memory) SavePullRequestReview(repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
-	log.Infof("  PR Review data fetched by %s at %v: %q\n", review.Author.Login, review.SubmittedAt, trim(review.Body))
+	log.Infof(" \tPR Review data fetched by %s at %v: %q\n", review.Author.Login, review.SubmittedAt, trim(review.Body))
 	return nil
 }
 
 // SavePullRequestReviewComment noop
 func (s *Memory) SavePullRequestReviewComment(repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewID int, comment *graphql.PullRequestReviewComment) error {
-	log.Infof("    PR review comment data fetched by %s at %v: %q\n", comment.Author.Login, comment.CreatedAt, trim(comment.Body))
+	log.Infof("\t\tPR review comment data fetched by %s at %v: %q\n", comment.Author.Login, comment.CreatedAt, trim(comment.Body))
 	return nil
 }
 
