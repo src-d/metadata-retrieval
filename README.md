@@ -376,4 +376,4 @@ GITHUB_TOKEN=<xxx> go test -cover ./...
 
 for coverage information.
 
-Where `GITHUB_TOKEN` is a personal access token as described above.
+Where `GITHUB_TOKEN` is a personal access token (scopes **read:org**, **repo**).
