@@ -10,6 +10,15 @@ import (
 	"gopkg.in/src-d/go-log.v1"
 )
 
+// errUnretriable wraps an error to stop retry
+type errUnretriable struct {
+	Err error
+}
+
+func (e *errUnretriable) Error() string {
+	return e.Err.Error()
+}
+
 type retryTransport struct {
 	T http.RoundTripper
 }
@@ -23,16 +32,20 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return err
 		}
 
-		if r.StatusCode != http.StatusOK {
-			body, _ := ioutil.ReadAll(r.Body)
-
-			// Restore the io.ReadCloser
-			r.Body = ioutil.NopCloser(bytes.NewBuffer(body))
-
-			return fmt.Errorf("non-200 OK status code: %v body: %q", r.Status, body)
+		if r.StatusCode == http.StatusOK {
+			return nil
 		}
 
-		return nil
+		body, _ := ioutil.ReadAll(r.Body)
+
+		// Restore the io.ReadCloser
+		r.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+
+		err = fmt.Errorf("non-200 OK status code: %v body: %q", r.Status, body)
+		if r.StatusCode > 500 {
+			return err
+		}
+		return &errUnretriable{Err: err}
 	})
 
 	return r, err
@@ -52,6 +65,9 @@ func retry(f func() error) error {
 		err := f()
 		if err == nil {
 			return nil
+		}
+		if errU, ok := err.(*errUnretriable); ok {
+			return errU.Err
 		}
 
 		if i == retries {
