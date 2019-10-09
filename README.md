@@ -360,6 +360,15 @@ You can see the diff between the current DB schema and the ghsync schema here:
 
 </details>
 
+### Migrations
+
+Migrations reside in `database/migrations` and they need to be packed with go-bindata before being usable.
+To repack migrations you can use:
+
+```
+make migration
+```
+
 ### Testing
 
 To test run:
