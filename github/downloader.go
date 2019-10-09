@@ -10,6 +10,7 @@ import (
 	"github.com/src-d/metadata-retrieval/github/store"
 
 	"github.com/shurcooL/githubv4"
+	"gopkg.in/src-d/go-log.v1"
 )
 
 const (
@@ -47,12 +48,13 @@ type storer interface {
 type Downloader struct {
 	storer
 	client *githubv4.Client
+	logger log.Logger
 }
 
 // NewDownloader creates a new Downloader that will store the GitHub metadata
 // in the given DB. The HTTP client is expected to have the proper
 // authentication setup
-func NewDownloader(httpClient *http.Client, db *sql.DB) (*Downloader, error) {
+func NewDownloader(logger log.Logger, httpClient *http.Client, db *sql.DB) (*Downloader, error) {
 	// TODO: is the ghsync rate limited client needed?
 
 	t := &retryTransport{httpClient.Transport}
@@ -61,13 +63,14 @@ func NewDownloader(httpClient *http.Client, db *sql.DB) (*Downloader, error) {
 	return &Downloader{
 		storer: &store.DB{DB: db},
 		client: githubv4.NewClient(httpClient),
+		logger: logger,
 	}, nil
 }
 
 // NewStdoutDownloader creates a new Downloader that will print the GitHub
 // metadata to stdout. The HTTP client is expected to have the proper
 // authentication setup
-func NewStdoutDownloader(httpClient *http.Client) (*Downloader, error) {
+func NewStdoutDownloader(logger log.Logger, httpClient *http.Client) (*Downloader, error) {
 	// TODO: is the ghsync rate limited client needed?
 
 	t := &retryTransport{httpClient.Transport}
@@ -76,6 +79,7 @@ func NewStdoutDownloader(httpClient *http.Client) (*Downloader, error) {
 	return &Downloader{
 		storer: &store.Stdout{},
 		client: githubv4.NewClient(httpClient),
+		logger: logger,
 	}, nil
 }
 
@@ -178,6 +182,9 @@ func (d Downloader) RateRemaining(ctx context.Context) (int, error) {
 }
 
 func (d Downloader) downloadTopics(ctx context.Context, repository *graphql.Repository) ([]string, error) {
+	d.logger.Infof("start downloading topics for '%s'", repository.Name)
+	defer d.logger.Infof("finished downloading topics for '%s'", repository.Name)
+
 	topics := []string{}
 
 	// Topics included in the first page
@@ -225,6 +232,9 @@ func (d Downloader) downloadTopics(ctx context.Context, repository *graphql.Repo
 }
 
 func (d Downloader) downloadIssues(ctx context.Context, owner string, name string, repository *graphql.Repository) error {
+	d.logger.Infof("start downloading issues for '%s'", repository.Name)
+	defer d.logger.Infof("finished downloading issues for '%s'", repository.Name)
+
 	process := func(issue *graphql.Issue) error {
 		assignees, err := d.downloadIssueAssignees(ctx, issue)
 		if err != nil {
@@ -446,6 +456,9 @@ func (d Downloader) downloadIssueComments(ctx context.Context, owner string, nam
 }
 
 func (d Downloader) downloadPullRequests(ctx context.Context, owner string, name string, repository *graphql.Repository) error {
+	d.logger.Infof("start downloading pull requests for '%s'", repository.Name)
+	defer d.logger.Infof("finished downloading pull requests for '%s'", repository.Name)
+
 	process := func(pr *graphql.PullRequest) error {
 		assignees, err := d.downloadPullRequestAssignees(ctx, pr)
 		if err != nil {
@@ -859,6 +872,9 @@ func (d Downloader) DownloadOrganization(ctx context.Context, name string, versi
 }
 
 func (d Downloader) downloadUsers(ctx context.Context, name string, organization *graphql.Organization) error {
+	d.logger.Infof("start downloading users")
+	defer d.logger.Infof("finished downloading users")
+
 	process := func(user *graphql.UserExtended) error {
 		err := d.storer.SaveUser(user)
 		if err != nil {
