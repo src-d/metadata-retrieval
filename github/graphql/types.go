@@ -2,6 +2,12 @@ package graphql
 
 import "time"
 
+// Connection represents common fields for paginated the connections
+type Connection struct {
+	PageInfo   PageInfo
+	TotalCount int
+}
+
 // PageInfo represents https://developer.github.com/v4/object/pageinfo/
 type PageInfo struct {
 	HasNextPage bool
@@ -45,9 +51,8 @@ type OrganizationFields struct {
 
 // OrganizationMemberConnection represents https://developer.github.com/v4/object/organizationmemberconnection/
 type OrganizationMemberConnection struct {
-	TotalCount int
-	PageInfo   PageInfo
-	Nodes      []UserExtended
+	Connection
+	Nodes []UserExtended
 } // `graphql:"membersWithRole(first: $membersWithRolePage, after: $membersWithRoleCursor)"`
 
 // UserExtended is the same type as User, but requesting more fields.
@@ -158,8 +163,8 @@ type RepositoryFields struct {
 
 // RepositoryTopicsConnection represents https://developer.github.com/v4/object/repositorytopicconnection/
 type RepositoryTopicsConnection struct {
-	PageInfo PageInfo
-	Nodes    []struct {
+	Connection
+	Nodes []struct {
 		Topic struct {
 			Name string
 		}
@@ -168,14 +173,13 @@ type RepositoryTopicsConnection struct {
 
 // IssueConnection represents https://developer.github.com/v4/object/issueconnection/
 type IssueConnection struct {
-	PageInfo PageInfo
-	Nodes    []Issue
+	Connection
+	Nodes []Issue
 } //`graphql:"issues(first: $issuesPage, after: $issuesCursor)"`
 
 type IssueCommentsConnection struct {
-	TotalCount int
-	PageInfo   PageInfo
-	Nodes      []IssueComment
+	Connection
+	Nodes []IssueComment
 } // `graphql:"comments(first: $issueCommentsPage, after: $issueCommentsCursor)"`
 
 // Issue represents https://developer.github.com/v4/object/issue/
@@ -229,8 +233,8 @@ type ClosedByConnection struct {
 
 // UserConnection represents https://developer.github.com/v4/object/userconnection/
 type UserConnection struct {
-	PageInfo PageInfo
-	Nodes    []User
+	Connection
+	Nodes []User
 } //`graphql:"assignees(first: $assigneesPage, after: $assigneesCursor)"`
 
 // Label represents https://developer.github.com/v4/object/label/
@@ -240,8 +244,8 @@ type Label struct {
 
 // LabelConnection represents https://developer.github.com/v4/object/labelconnection/
 type LabelConnection struct {
-	PageInfo PageInfo
-	Nodes    []Label
+	Connection
+	Nodes []Label
 } //`graphql:"labels(first: $labelsPage, after: $labelsCursor)"`
 
 type IssueComment struct {
@@ -256,8 +260,8 @@ type IssueComment struct {
 }
 
 type PullRequestConnection struct {
-	PageInfo PageInfo
-	Nodes    []PullRequest
+	Connection
+	Nodes []PullRequest
 } //`graphql:"pullRequests(first: $pullRequestsPage, after: $pullRequestsCursor)"`
 
 type PullRequest struct {
@@ -327,9 +331,8 @@ type PullRequestFields struct {
 }
 
 type PullRequestReviewConnection struct {
-	//TotalCount int
-	PageInfo PageInfo
-	Nodes    []PullRequestReview
+	Connection
+	Nodes []PullRequestReview
 } // `graphql:"reviews(first: $pullRequestReviewsPage, after: $pullRequestReviewsCursor)"`
 
 type PullRequestReview struct {
@@ -353,9 +356,8 @@ type PullRequestReviewFields struct {
 }
 
 type PullRequestReviewCommentConnection struct {
-	//TotalCount int
-	PageInfo PageInfo
-	Nodes    []PullRequestReviewComment
+	Connection
+	Nodes []PullRequestReviewComment
 }
 
 type PullRequestReviewComment struct {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/src-d/metadata-retrieval/github/graphql"
 	"github.com/src-d/metadata-retrieval/github/store"
+	"github.com/src-d/metadata-retrieval/utils/ctxlog"
 
 	"github.com/shurcooL/githubv4"
 	"gopkg.in/src-d/go-log.v1"
@@ -23,6 +24,9 @@ const (
 	pullRequestReviewsPage        = 5
 	pullRequestsPage              = 50
 	repositoryTopicsPage          = 50
+
+	// to track progress of sub-resources only each N page to avoid log flooding
+	logEachPageN = 3
 )
 
 type storer interface {
@@ -48,13 +52,12 @@ type storer interface {
 type Downloader struct {
 	storer
 	client *githubv4.Client
-	logger log.Logger
 }
 
 // NewDownloader creates a new Downloader that will store the GitHub metadata
 // in the given DB. The HTTP client is expected to have the proper
 // authentication setup
-func NewDownloader(logger log.Logger, httpClient *http.Client, db *sql.DB) (*Downloader, error) {
+func NewDownloader(httpClient *http.Client, db *sql.DB) (*Downloader, error) {
 	// TODO: is the ghsync rate limited client needed?
 
 	t := &retryTransport{httpClient.Transport}
@@ -63,14 +66,13 @@ func NewDownloader(logger log.Logger, httpClient *http.Client, db *sql.DB) (*Dow
 	return &Downloader{
 		storer: &store.DB{DB: db},
 		client: githubv4.NewClient(httpClient),
-		logger: logger,
 	}, nil
 }
 
 // NewStdoutDownloader creates a new Downloader that will print the GitHub
 // metadata to stdout. The HTTP client is expected to have the proper
 // authentication setup
-func NewStdoutDownloader(logger log.Logger, httpClient *http.Client) (*Downloader, error) {
+func NewStdoutDownloader(httpClient *http.Client) (*Downloader, error) {
 	// TODO: is the ghsync rate limited client needed?
 
 	t := &retryTransport{httpClient.Transport}
@@ -79,13 +81,14 @@ func NewStdoutDownloader(logger log.Logger, httpClient *http.Client) (*Downloade
 	return &Downloader{
 		storer: &store.Stdout{},
 		client: githubv4.NewClient(httpClient),
-		logger: logger,
 	}, nil
 }
 
 // DownloadRepository downloads the metadata for the given repository and all
 // its resources (issues, PRs, comments, reviews)
 func (d Downloader) DownloadRepository(ctx context.Context, owner string, name string, version int) error {
+	ctx, _ = ctxlog.WithLogFields(ctx, log.Fields{"owner": owner, "repo": name})
+
 	d.storer.Version(version)
 
 	var err error
@@ -182,8 +185,9 @@ func (d Downloader) RateRemaining(ctx context.Context) (int, error) {
 }
 
 func (d Downloader) downloadTopics(ctx context.Context, repository *graphql.Repository) ([]string, error) {
-	d.logger.Infof("start downloading topics for '%s'", repository.Name)
-	defer d.logger.Infof("finished downloading topics for '%s'", repository.Name)
+	logger := ctxlog.Get(ctx)
+	logger.Infof("start downloading topics")
+	defer logger.Infof("finished downloading topics")
 
 	topics := []string{}
 
@@ -232,8 +236,9 @@ func (d Downloader) downloadTopics(ctx context.Context, repository *graphql.Repo
 }
 
 func (d Downloader) downloadIssues(ctx context.Context, owner string, name string, repository *graphql.Repository) error {
-	d.logger.Infof("start downloading issues for '%s'", repository.Name)
-	defer d.logger.Infof("finished downloading issues for '%s'", repository.Name)
+	logger := ctxlog.Get(ctx)
+	logger.Infof("start downloading issues")
+	defer logger.Infof("finished downloading issues")
 
 	process := func(issue *graphql.Issue) error {
 		assignees, err := d.downloadIssueAssignees(ctx, issue)
@@ -252,6 +257,8 @@ func (d Downloader) downloadIssues(ctx context.Context, owner string, name strin
 		}
 		return d.downloadIssueComments(ctx, owner, name, issue)
 	}
+
+	count := len(repository.Issues.Nodes)
 
 	// Save issues included in the first page
 	for _, issue := range repository.Issues.Nodes {
@@ -280,6 +287,10 @@ func (d Downloader) downloadIssues(ctx context.Context, owner string, name strin
 	endCursor := repository.Issues.PageInfo.EndCursor
 
 	for hasNextPage {
+		if count%(issuesPage*logEachPageN) == 0 {
+			logger.Infof("%d/%d issues downloaded", count, repository.Issues.TotalCount)
+		}
+
 		// get only issues
 		var q struct {
 			Node struct {
@@ -303,6 +314,7 @@ func (d Downloader) downloadIssues(ctx context.Context, owner string, name strin
 			}
 		}
 
+		count += len(q.Node.Repository.Issues.Nodes)
 		hasNextPage = q.Node.Repository.Issues.PageInfo.HasNextPage
 		endCursor = q.Node.Repository.Issues.PageInfo.EndCursor
 	}
@@ -456,8 +468,9 @@ func (d Downloader) downloadIssueComments(ctx context.Context, owner string, nam
 }
 
 func (d Downloader) downloadPullRequests(ctx context.Context, owner string, name string, repository *graphql.Repository) error {
-	d.logger.Infof("start downloading pull requests for '%s'", repository.Name)
-	defer d.logger.Infof("finished downloading pull requests for '%s'", repository.Name)
+	logger := ctxlog.Get(ctx)
+	logger.Infof("start downloading pull requests")
+	defer logger.Infof("finished downloading pull requests")
 
 	process := func(pr *graphql.PullRequest) error {
 		assignees, err := d.downloadPullRequestAssignees(ctx, pr)
@@ -485,6 +498,8 @@ func (d Downloader) downloadPullRequests(ctx context.Context, owner string, name
 
 		return nil
 	}
+
+	count := len(repository.PullRequests.Nodes)
 
 	// Save PRs included in the first page
 	for _, pr := range repository.PullRequests.Nodes {
@@ -517,6 +532,10 @@ func (d Downloader) downloadPullRequests(ctx context.Context, owner string, name
 	endCursor := repository.PullRequests.PageInfo.EndCursor
 
 	for hasNextPage {
+		if count%(pullRequestsPage*logEachPageN) == 0 {
+			logger.Infof("%d/%d pull requests downloaded", count, repository.PullRequests.TotalCount)
+		}
+
 		// get only PRs
 		var q struct {
 			Node struct {
@@ -540,6 +559,7 @@ func (d Downloader) downloadPullRequests(ctx context.Context, owner string, name
 			}
 		}
 
+		count += len(q.Node.Repository.PullRequests.Nodes)
 		hasNextPage = q.Node.Repository.PullRequests.PageInfo.HasNextPage
 		endCursor = q.Node.Repository.PullRequests.PageInfo.EndCursor
 	}
@@ -872,8 +892,10 @@ func (d Downloader) DownloadOrganization(ctx context.Context, name string, versi
 }
 
 func (d Downloader) downloadUsers(ctx context.Context, name string, organization *graphql.Organization) error {
-	d.logger.Infof("start downloading users")
-	defer d.logger.Infof("finished downloading users")
+	var logger log.Logger
+	ctx, logger = ctxlog.WithLogFields(ctx, log.Fields{"owner": name})
+	logger.Infof("start downloading users")
+	defer logger.Infof("finished downloading users")
 
 	process := func(user *graphql.UserExtended) error {
 		err := d.storer.SaveUser(user)

@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
-	"gopkg.in/src-d/go-log.v1"
 )
 
 // RepositoryTest struct to hold a test oracle for a repository
@@ -72,9 +71,7 @@ func loadOnlineTests(filepath string) (OnlineTests, error) {
 }
 
 func getDownloader() (*Downloader, *testutils.Memory, error) {
-	logger := log.New(nil)
 	downloader, err := NewStdoutDownloader(
-		logger,
 		oauth2.NewClient(
 			context.TODO(),
 			oauth2.StaticTokenSource(

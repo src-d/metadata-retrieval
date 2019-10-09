@@ -121,7 +121,7 @@ func (c *DownloaderCmd) ExecuteBody(logger log.Logger, fn bodyFunc) error {
 	if c.DB == "" {
 		log.Infof("using stdout to save the data")
 		var err error
-		downloader, err = github.NewStdoutDownloader(logger, client)
+		downloader, err = github.NewStdoutDownloader(client)
 		if err != nil {
 			return err
 		}
@@ -146,7 +146,7 @@ func (c *DownloaderCmd) ExecuteBody(logger log.Logger, fn bodyFunc) error {
 			return err
 		}
 
-		downloader, err = github.NewDownloader(logger, client, db)
+		downloader, err = github.NewDownloader(client, db)
 	}
 
 	rate0, err := downloader.RateRemaining(context.TODO())
