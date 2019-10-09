@@ -359,3 +359,21 @@ You can see the diff between the current DB schema and the ghsync schema here:
 ```
 
 </details>
+
+### Testing
+
+To test run:
+
+```
+GITHUB_TOKEN=<xxx> go test ./...
+```
+
+and 
+
+```
+GITHUB_TOKEN=<xxx> go test -cover ./...
+```
+
+for coverage information.
+
+Where `GITHUB_TOKEN` is a personal access token (scopes **read:org**, **repo**).
