@@ -3,6 +3,11 @@ go_import_path: github.com/src-d/metdata-retrieval
 go:
   - 1.13.x
 
+branches:
+  only:
+    - master
+    - /^v\d+\.\d+(\.\d+)?(-\S*)?$/
+
 stages:
   - name: tests
 
