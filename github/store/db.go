@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
@@ -56,60 +57,60 @@ var tables = []string{
 	"pull_request_comments_versioned",
 }
 
-func (s *DB) SetActiveVersion(v int) error {
+func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 	// TODO: for some reason the normal parameter interpolation $1 fails with
 	// pq: got 1 parameters but the statement requires 0
 
-	_, err := s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW organizations AS
+	_, err := s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW organizations AS
 	SELECT %s
 	FROM organizations_versioned WHERE %v = ANY(versions)`, organizationsCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW organizations: %v", err)
 	}
 
-	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW users AS
+	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW users AS
 	SELECT %s
 	FROM users_versioned WHERE %v = ANY(versions)`, usersCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW users: %v", err)
 	}
 
-	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW repositories AS
+	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW repositories AS
 	SELECT %s
 	FROM repositories_versioned WHERE %v = ANY(versions)`, repositoriesCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW repositories: %v", err)
 	}
 
-	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW issues AS
+	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW issues AS
 	SELECT %s
 	FROM issues_versioned WHERE %v = ANY(versions)`, issuesCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW issues: %v", err)
 	}
 
-	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW issue_comments AS
+	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW issue_comments AS
 	SELECT %s
 	FROM issue_comments_versioned WHERE %v = ANY(versions)`, issueCommentsCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW issue_comments: %v", err)
 	}
 
-	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW pull_requests AS
+	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW pull_requests AS
 	SELECT %s
 	FROM pull_requests_versioned WHERE %v = ANY(versions)`, pullRequestsCol, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW pull_requests: %v", err)
 	}
 
-	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW pull_request_reviews AS
+	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW pull_request_reviews AS
 	SELECT %s
 	FROM pull_request_reviews_versioned WHERE %v = ANY(versions)`, pullRequestReviewsCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW pull_request_reviews: %v", err)
 	}
 
-	_, err = s.DB.Exec(fmt.Sprintf(`CREATE OR REPLACE VIEW pull_request_comments AS
+	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW pull_request_comments AS
 	SELECT %s
 	FROM pull_request_comments_versioned WHERE %v = ANY(versions)`, pullRequestReviewCommentsCols, v))
 	if err != nil {
@@ -119,17 +120,17 @@ func (s *DB) SetActiveVersion(v int) error {
 	return nil
 }
 
-func (s *DB) Cleanup(currentVersion int) error {
+func (s *DB) Cleanup(ctx context.Context, currentVersion int) error {
 	for _, table := range tables {
 		// Delete all entries that do not belong to currentVersion
-		_, err := s.DB.Exec(fmt.Sprintf(`DELETE FROM %s WHERE %v <> ALL(versions)`, table, currentVersion))
+		_, err := s.DB.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE %v <> ALL(versions)`, table, currentVersion))
 		if err != nil {
 			return fmt.Errorf("failed in cleanup method, delete: %v", err)
 		}
 
 		// All remaining entries belong to currentVersion, replace the list of versions
 		// with an array of 1 entry
-		_, err = s.DB.Exec(fmt.Sprintf(`UPDATE %s SET versions = array[%v]`, table, currentVersion))
+		_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET versions = array[%v]`, table, currentVersion))
 		if err != nil {
 			return fmt.Errorf("failed in cleanup method, update: %v", err)
 		}
@@ -138,7 +139,7 @@ func (s *DB) Cleanup(currentVersion int) error {
 	return nil
 }
 
-func (s *DB) SaveOrganization(organization *graphql.Organization) error {
+func (s *DB) SaveOrganization(ctx context.Context, organization *graphql.Organization) error {
 	statement := fmt.Sprintf(
 		`INSERT INTO organizations_versioned
 		(sum256, versions, %s)
@@ -153,7 +154,7 @@ func (s *DB) SaveOrganization(organization *graphql.Organization) error {
 	hash := sha256.Sum256([]byte(st))
 	hashString := fmt.Sprintf("%x", hash)
 
-	_, err := s.tx.Exec(statement,
+	_, err := s.tx.ExecContext(ctx, statement,
 		hashString,
 		pq.Array([]int{s.v}),
 
@@ -187,7 +188,7 @@ func (s *DB) SaveOrganization(organization *graphql.Organization) error {
 	return nil
 }
 
-func (s *DB) SaveUser(user *graphql.UserExtended) error {
+func (s *DB) SaveUser(ctx context.Context, user *graphql.UserExtended) error {
 	statement := fmt.Sprintf(
 		`INSERT INTO users_versioned
 		(sum256, versions, %s)
@@ -202,7 +203,7 @@ func (s *DB) SaveUser(user *graphql.UserExtended) error {
 	hash := sha256.Sum256([]byte(st))
 	hashString := fmt.Sprintf("%x", hash)
 
-	_, err := s.tx.Exec(statement,
+	_, err := s.tx.ExecContext(ctx, statement,
 		hashString,
 		pq.Array([]int{s.v}),
 
@@ -239,7 +240,7 @@ func (s *DB) SaveUser(user *graphql.UserExtended) error {
 	return nil
 }
 
-func (s *DB) SaveRepository(repository *graphql.RepositoryFields, topics []string) error {
+func (s *DB) SaveRepository(ctx context.Context, repository *graphql.RepositoryFields, topics []string) error {
 	statement := fmt.Sprintf(
 		`INSERT INTO repositories_versioned
 		(sum256, versions, %s)
@@ -255,7 +256,7 @@ func (s *DB) SaveRepository(repository *graphql.RepositoryFields, topics []strin
 	hash := sha256.Sum256([]byte(st))
 	hashString := fmt.Sprintf("%x", hash)
 
-	_, err := s.tx.Exec(statement,
+	_, err := s.tx.ExecContext(ctx, statement,
 		hashString,
 		pq.Array([]int{s.v}),
 
@@ -312,7 +313,7 @@ func repoOwnerID(repository *graphql.RepositoryFields) int {
 	}
 }
 
-func (s *DB) SaveIssue(repositoryOwner, repositoryName string, issue *graphql.Issue, assignees []string, labels []string) error {
+func (s *DB) SaveIssue(ctx context.Context, repositoryOwner, repositoryName string, issue *graphql.Issue, assignees []string, labels []string) error {
 	statement := fmt.Sprintf(
 		`INSERT INTO issues_versioned
 		(sum256, versions, %s)
@@ -335,7 +336,7 @@ func (s *DB) SaveIssue(repositoryOwner, repositoryName string, issue *graphql.Is
 		closedByLogin = issue.ClosedBy.Nodes[0].ClosedEvent.Actor.Login
 	}
 
-	_, err := s.tx.Exec(statement,
+	_, err := s.tx.ExecContext(ctx, statement,
 		hashString,
 		pq.Array([]int{s.v}),
 
@@ -371,7 +372,7 @@ func (s *DB) SaveIssue(repositoryOwner, repositoryName string, issue *graphql.Is
 	return nil
 }
 
-func (s *DB) SaveIssueComment(repositoryOwner, repositoryName string, issueNumber int, comment *graphql.IssueComment) error {
+func (s *DB) SaveIssueComment(ctx context.Context, repositoryOwner, repositoryName string, issueNumber int, comment *graphql.IssueComment) error {
 	statement := fmt.Sprintf(`INSERT INTO issue_comments_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
@@ -384,7 +385,7 @@ func (s *DB) SaveIssueComment(repositoryOwner, repositoryName string, issueNumbe
 	hash := sha256.Sum256([]byte(st))
 	hashString := fmt.Sprintf("%x", hash)
 
-	_, err := s.tx.Exec(statement,
+	_, err := s.tx.ExecContext(ctx, statement,
 		hashString,
 		pq.Array([]int{s.v}),
 
@@ -410,7 +411,7 @@ func (s *DB) SaveIssueComment(repositoryOwner, repositoryName string, issueNumbe
 	return nil
 }
 
-func (s *DB) SavePullRequest(repositoryOwner, repositoryName string, pr *graphql.PullRequest, assignees []string, labels []string) error {
+func (s *DB) SavePullRequest(ctx context.Context, repositoryOwner, repositoryName string, pr *graphql.PullRequest, assignees []string, labels []string) error {
 	statement := fmt.Sprintf(
 		`INSERT INTO pull_requests_versioned
 		(sum256, versions, %s)
@@ -426,7 +427,7 @@ func (s *DB) SavePullRequest(repositoryOwner, repositoryName string, pr *graphql
 	hash := sha256.Sum256([]byte(st))
 	hashString := fmt.Sprintf("%x", hash)
 
-	_, err := s.tx.Exec(statement,
+	_, err := s.tx.ExecContext(ctx, statement,
 		hashString,
 		pq.Array([]int{s.v}),
 
@@ -482,12 +483,12 @@ func (s *DB) SavePullRequest(repositoryOwner, repositoryName string, pr *graphql
 	return nil
 }
 
-func (s *DB) SavePullRequestComment(repositoryOwner, repositoryName string, pullRequestNumber int, comment *graphql.IssueComment) error {
+func (s *DB) SavePullRequestComment(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, comment *graphql.IssueComment) error {
 	// ghsync saves both Issue and PRs comments in the same table, issue_comments
-	return s.SaveIssueComment(repositoryOwner, repositoryName, pullRequestNumber, comment)
+	return s.SaveIssueComment(ctx, repositoryOwner, repositoryName, pullRequestNumber, comment)
 }
 
-func (s *DB) SavePullRequestReview(repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
+func (s *DB) SavePullRequestReview(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
 	statement := fmt.Sprintf(`INSERT INTO pull_request_reviews_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
@@ -500,7 +501,7 @@ func (s *DB) SavePullRequestReview(repositoryOwner, repositoryName string, pullR
 	hash := sha256.Sum256([]byte(st))
 	hashString := fmt.Sprintf("%x", hash)
 
-	_, err := s.tx.Exec(statement,
+	_, err := s.tx.ExecContext(ctx, statement,
 		hashString,
 		pq.Array([]int{s.v}),
 
@@ -526,7 +527,7 @@ func (s *DB) SavePullRequestReview(repositoryOwner, repositoryName string, pullR
 	return nil
 }
 
-func (s *DB) SavePullRequestReviewComment(repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewId int, comment *graphql.PullRequestReviewComment) error {
+func (s *DB) SavePullRequestReviewComment(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewId int, comment *graphql.PullRequestReviewComment) error {
 	statement := fmt.Sprintf(`INSERT INTO pull_request_comments_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
@@ -540,7 +541,7 @@ func (s *DB) SavePullRequestReviewComment(repositoryOwner, repositoryName string
 	hash := sha256.Sum256([]byte(st))
 	hashString := fmt.Sprintf("%x", hash)
 
-	_, err := s.tx.Exec(statement,
+	_, err := s.tx.ExecContext(ctx, statement,
 		hashString,
 		pq.Array([]int{s.v}),
 

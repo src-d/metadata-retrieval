@@ -25,22 +25,22 @@ const (
 )
 
 type storer interface {
-	SaveOrganization(organization *graphql.Organization) error
-	SaveUser(user *graphql.UserExtended) error
-	SaveRepository(repository *graphql.RepositoryFields, topics []string) error
-	SaveIssue(repositoryOwner, repositoryName string, issue *graphql.Issue, assignees []string, labels []string) error
-	SaveIssueComment(repositoryOwner, repositoryName string, issueNumber int, comment *graphql.IssueComment) error
-	SavePullRequest(repositoryOwner, repositoryName string, pr *graphql.PullRequest, assignees []string, labels []string) error
-	SavePullRequestComment(repositoryOwner, repositoryName string, pullRequestNumber int, comment *graphql.IssueComment) error
-	SavePullRequestReview(repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error
-	SavePullRequestReviewComment(repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewId int, comment *graphql.PullRequestReviewComment) error
+	SaveOrganization(ctx context.Context, organization *graphql.Organization) error
+	SaveUser(ctx context.Context, user *graphql.UserExtended) error
+	SaveRepository(ctx context.Context, repository *graphql.RepositoryFields, topics []string) error
+	SaveIssue(ctx context.Context, repositoryOwner, repositoryName string, issue *graphql.Issue, assignees []string, labels []string) error
+	SaveIssueComment(ctx context.Context, repositoryOwner, repositoryName string, issueNumber int, comment *graphql.IssueComment) error
+	SavePullRequest(ctx context.Context, repositoryOwner, repositoryName string, pr *graphql.PullRequest, assignees []string, labels []string) error
+	SavePullRequestComment(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, comment *graphql.IssueComment) error
+	SavePullRequestReview(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error
+	SavePullRequestReviewComment(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewId int, comment *graphql.PullRequestReviewComment) error
 
 	Begin() error
 	Commit() error
 	Rollback() error
 	Version(v int)
-	SetActiveVersion(v int) error
-	Cleanup(currentVersion int) error
+	SetActiveVersion(ctx context.Context, v int) error
+	Cleanup(ctx context.Context, currentVersion int) error
 }
 
 // Downloader fetches GitHub data using the v4 API
@@ -141,7 +141,7 @@ func (d Downloader) DownloadRepository(ctx context.Context, owner string, name s
 		return err
 	}
 
-	err = d.storer.SaveRepository(&q.Repository.RepositoryFields, topics)
+	err = d.storer.SaveRepository(ctx, &q.Repository.RepositoryFields, topics)
 	if err != nil {
 		return fmt.Errorf("failed to save repository %v: %v", q.Repository.NameWithOwner, err)
 	}
@@ -236,7 +236,7 @@ func (d Downloader) downloadIssues(ctx context.Context, owner string, name strin
 			return err
 		}
 
-		err = d.storer.SaveIssue(owner, name, issue, assignees, labels)
+		err = d.storer.SaveIssue(ctx, owner, name, issue, assignees, labels)
 		if err != nil {
 			return err
 		}
@@ -397,7 +397,7 @@ func (d Downloader) downloadIssueLabels(ctx context.Context, issue *graphql.Issu
 func (d Downloader) downloadIssueComments(ctx context.Context, owner string, name string, issue *graphql.Issue) error {
 	// save first page of comments
 	for _, comment := range issue.Comments.Nodes {
-		err := d.storer.SaveIssueComment(owner, name, issue.Number, &comment)
+		err := d.storer.SaveIssueComment(ctx, owner, name, issue.Number, &comment)
 		if err != nil {
 			return err
 		}
@@ -432,7 +432,7 @@ func (d Downloader) downloadIssueComments(ctx context.Context, owner string, nam
 		}
 
 		for _, comment := range q.Node.Issue.Comments.Nodes {
-			err := d.storer.SaveIssueComment(owner, name, issue.Number, &comment)
+			err := d.storer.SaveIssueComment(ctx, owner, name, issue.Number, &comment)
 			if err != nil {
 				return fmt.Errorf("failed to save issue comments for issue #%v: %v", issue.Number, err)
 			}
@@ -457,7 +457,7 @@ func (d Downloader) downloadPullRequests(ctx context.Context, owner string, name
 			return err
 		}
 
-		err = d.storer.SavePullRequest(owner, name, pr, assignees, labels)
+		err = d.storer.SavePullRequest(ctx, owner, name, pr, assignees, labels)
 		if err != nil {
 			return err
 		}
@@ -631,7 +631,7 @@ func (d Downloader) downloadPullRequestLabels(ctx context.Context, pr *graphql.P
 func (d Downloader) downloadPullRequestComments(ctx context.Context, owner string, name string, pr *graphql.PullRequest) error {
 	// save first page of comments
 	for _, comment := range pr.Comments.Nodes {
-		err := d.storer.SavePullRequestComment(owner, name, pr.Number, &comment)
+		err := d.storer.SavePullRequestComment(ctx, owner, name, pr.Number, &comment)
 		if err != nil {
 			return fmt.Errorf("failed to save PR comments for PR #%v: %v", pr.Number, err)
 		}
@@ -666,7 +666,7 @@ func (d Downloader) downloadPullRequestComments(ctx context.Context, owner strin
 		}
 
 		for _, comment := range q.Node.PullRequest.Comments.Nodes {
-			err := d.storer.SavePullRequestComment(owner, name, pr.Number, &comment)
+			err := d.storer.SavePullRequestComment(ctx, owner, name, pr.Number, &comment)
 			if err != nil {
 				return fmt.Errorf("failed to save PR comments for PR #%v: %v", pr.Number, err)
 			}
@@ -681,7 +681,7 @@ func (d Downloader) downloadPullRequestComments(ctx context.Context, owner strin
 
 func (d Downloader) downloadPullRequestReviews(ctx context.Context, owner string, name string, pr *graphql.PullRequest) error {
 	process := func(review *graphql.PullRequestReview) error {
-		err := d.storer.SavePullRequestReview(owner, name, pr.Number, review)
+		err := d.storer.SavePullRequestReview(ctx, owner, name, pr.Number, review)
 		if err != nil {
 			return fmt.Errorf("failed to save PR review for PR #%v: %v", pr.Number, err)
 		}
@@ -743,7 +743,7 @@ func (d Downloader) downloadPullRequestReviews(ctx context.Context, owner string
 
 func (d Downloader) downloadReviewComments(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
 	process := func(comment *graphql.PullRequestReviewComment) error {
-		err := d.storer.SavePullRequestReviewComment(repositoryOwner, repositoryName, pullRequestNumber, review.DatabaseId, comment)
+		err := d.storer.SavePullRequestReviewComment(ctx, repositoryOwner, repositoryName, pullRequestNumber, review.DatabaseId, comment)
 		if err != nil {
 			return fmt.Errorf(
 				"failed to save PullRequestReviewComment for PR #%v, review ID %v: %v",
@@ -844,7 +844,7 @@ func (d Downloader) DownloadOrganization(ctx context.Context, name string, versi
 		return fmt.Errorf("organization query failed: %v", err)
 	}
 
-	err = d.storer.SaveOrganization(&q.Organization)
+	err = d.storer.SaveOrganization(ctx, &q.Organization)
 	if err != nil {
 		return fmt.Errorf("failed to save organization %v: %v", name, err)
 	}
@@ -860,7 +860,7 @@ func (d Downloader) DownloadOrganization(ctx context.Context, name string, versi
 
 func (d Downloader) downloadUsers(ctx context.Context, name string, organization *graphql.Organization) error {
 	process := func(user *graphql.UserExtended) error {
-		err := d.storer.SaveUser(user)
+		err := d.storer.SaveUser(ctx, user)
 		if err != nil {
 			return fmt.Errorf("failed to save UserExtended: %v", err)
 		}
@@ -917,8 +917,8 @@ func (d Downloader) downloadUsers(ctx context.Context, name string, organization
 }
 
 // SetCurrent enables the given version as the current one accessible in the DB
-func (d Downloader) SetCurrent(version int) error {
-	err := d.storer.SetActiveVersion(version)
+func (d Downloader) SetCurrent(ctx context.Context, version int) error {
+	err := d.storer.SetActiveVersion(ctx, version)
 	if err != nil {
 		return fmt.Errorf("failed to set current DB version to %v: %v", version, err)
 	}
@@ -926,8 +926,8 @@ func (d Downloader) SetCurrent(version int) error {
 }
 
 // Cleanup deletes from the DB all records that do not belong to the currentVersion
-func (d Downloader) Cleanup(currentVersion int) error {
-	err := d.storer.Cleanup(currentVersion)
+func (d Downloader) Cleanup(ctx context.Context, currentVersion int) error {
+	err := d.storer.Cleanup(ctx, currentVersion)
 	if err != nil {
 		return fmt.Errorf("failed to do cleanup for DB version %v: %v", currentVersion, err)
 	}

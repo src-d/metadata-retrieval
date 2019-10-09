@@ -107,7 +107,9 @@ func (c *Ghsync) Execute(args []string) error {
 type bodyFunc = func(httpClient *http.Client, downloader *github.Downloader) error
 
 func (c *DownloaderCmd) ExecuteBody(logger log.Logger, fn bodyFunc) error {
-	client := oauth2.NewClient(context.TODO(), oauth2.StaticTokenSource(
+	ctx := context.Background()
+
+	client := oauth2.NewClient(ctx, oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: c.Token},
 	))
 
@@ -147,7 +149,7 @@ func (c *DownloaderCmd) ExecuteBody(logger log.Logger, fn bodyFunc) error {
 		downloader, err = github.NewDownloader(client, db)
 	}
 
-	rate0, err := downloader.RateRemaining(context.TODO())
+	rate0, err := downloader.RateRemaining(ctx)
 	if err != nil {
 		return err
 	}
@@ -158,18 +160,18 @@ func (c *DownloaderCmd) ExecuteBody(logger log.Logger, fn bodyFunc) error {
 		return err
 	}
 
-	err = downloader.SetCurrent(c.Version)
+	err = downloader.SetCurrent(ctx, c.Version)
 	if err != nil {
 		return err
 	}
 
 	if c.Cleanup {
-		return downloader.Cleanup(c.Version)
+		return downloader.Cleanup(ctx, c.Version)
 	}
 
 	elapsed := time.Since(t0)
 
-	rate1, err := downloader.RateRemaining(context.TODO())
+	rate1, err := downloader.RateRemaining(ctx)
 	if err != nil {
 		return err
 	}
