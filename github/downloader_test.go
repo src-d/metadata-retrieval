@@ -314,6 +314,7 @@ func (suite *DownloaderTestSuite) TestOnlineOrganizationDownloadWithDB() {
 			&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
 		)), suite.db)
 	suite.NoError(err, "Failed to init the downloader")
+	downloader.SetActiveVersion(0)
 	suite.downloader = downloader
 	for _, test := range tests.OrganizationsTests {
 		test := test
@@ -374,6 +375,7 @@ func (suite *DownloaderTestSuite) TestOnlineRepositoryDownloadWithDB() {
 			&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
 		)), suite.db)
 	suite.NoError(err, "Failed to init the downloader")
+	downloader.SetActiveVersion(0)
 	suite.downloader = downloader
 	for _, test := range tests.RepositoryTests {
 		test := test
@@ -410,6 +412,7 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownloadWithDB() {
 				}
 			})}),
 	}
+	downloader.SetActiveVersion(0)
 	suite.downloader = downloader
 	tests, err := loadTests("../testdata/offline-organization-tests.json")
 	suite.NoError(err, "Failed to read the offline tests")
@@ -446,6 +449,8 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithDB() {
 				}
 			})}),
 	}
+	downloader.SetActiveVersion(0)
+	suite.downloader = downloader
 	tests, err := loadTests("../testdata/offline-repository-tests.json")
 	suite.NoError(err, "Failed to read the offline tests")
 	for _, test := range tests.RepositoryTests {
