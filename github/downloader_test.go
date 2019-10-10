@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +30,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/oauth2"
 )
+
+const orgRecFile = "../testdata/organization_src-d_2019-10-10.gob"
+const repoRecFile = "../testdata/repository_src-d_gitbase_2019-10-10.gob"
 
 // loads requests-response data from a gob file
 func loadReqResp(filepath string, reqResp map[string]string) error {
@@ -69,17 +73,17 @@ func checkToken(t *testing.T) {
 	}
 }
 
-func checkOS(t *testing.T) {
+func isOSX() bool {
 	// docker service is not supported on osx in Travis: https://docs.travis-ci.com/user/docker/
 	if runtime.GOOS == "darwin" {
-		t.Skip("cannot run these tests on osx")
-		return
+		return true
 	}
+	return true
 }
 
 // Testing connection documentation, docker-compose and Migrate method
 func getDB(t *testing.T) (db *sql.DB) {
-	const DBURL = "postgres://user:password@127.0.0.1:5432/ghsync?sslmode=disable"
+	const DBURL = "postgres://user:password@localhost:5432/ghsync?sslmode=disable"
 	db, err := sql.Open("postgres", DBURL)
 	require.NoError(t, err, "DB URL is not working")
 	if err = db.Ping(); err != nil {
@@ -131,11 +135,10 @@ type DownloaderTestSuite struct {
 }
 
 func (suite *DownloaderTestSuite) SetupSuite() {
-	suite.db = getDB(suite.T())
-}
-
-func (suite *DownloaderTestSuite) TestDB() {
-	suite.NotNil(suite.db)
+	if !isOSX() {
+		suite.db = getDB(suite.T())
+		suite.NotNil(suite.db)
+	}
 }
 
 // TestOnlineRepositoryDownload Tests the download of known and fixed GitHub repositories
@@ -206,7 +209,7 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownload() {
 	t := suite.T()
 	reqResp := make(map[string]string)
 	// Load the recording
-	suite.NoError(loadReqResp("../testdata/organization_src-d_2019-10-08.gob", reqResp), "Failed to read the offline recordings")
+	suite.NoError(loadReqResp(orgRecFile, reqResp), "Failed to read the offline recordings")
 	// Setup the downloader with RoundTrip functionality.
 	// Not using the NewStdoutDownloader initialization because it overides the transport
 	storer := &testutils.Memory{}
@@ -243,7 +246,7 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownload() {
 func (suite *DownloaderTestSuite) TestOfflineRepositoryDownload() {
 	t := suite.T()
 	reqResp := make(map[string]string)
-	suite.NoError(loadReqResp("../testdata/repository_src-d_gitbase_2019-10-08.gob", reqResp), "Failed to read the offline recordings")
+	suite.NoError(loadReqResp(repoRecFile, reqResp), "Failed to read the offline recordings")
 	storer := &testutils.Memory{}
 	downloader := &Downloader{
 		storer: storer,
@@ -303,7 +306,6 @@ func testOrgWithDB(t *testing.T, oracle testutils.OrganizationTest, d *Downloade
 func (suite *DownloaderTestSuite) TestOnlineOrganizationDownloadWithDB() {
 	t := suite.T()
 	checkToken(t)
-	checkOS(t)
 	tests, err := loadTests("../testdata/online-organization-tests.json")
 	suite.NoError(err, "Failed to read the online tests")
 	downloader, err := NewDownloader(oauth2.NewClient(
@@ -364,7 +366,6 @@ func testRepoWithDB(t *testing.T, oracle testutils.RepositoryTest, d *Downloader
 func (suite *DownloaderTestSuite) TestOnlineRepositoryDownloadWithDB() {
 	t := suite.T()
 	checkToken(t)
-	checkOS(t)
 	tests, err := loadTests("../testdata/online-repository-tests.json")
 	suite.NoError(err, "Failed to read the online tests")
 	downloader, err := NewDownloader(oauth2.NewClient(
@@ -385,10 +386,9 @@ func (suite *DownloaderTestSuite) TestOnlineRepositoryDownloadWithDB() {
 // TestOfflineOrganizationDownloadWithDB Tests a large organization by replaying recorded responses and storing the results in Postgresql
 func (suite *DownloaderTestSuite) TestOfflineOrganizationDownloadWithDB() {
 	t := suite.T()
-	checkOS(t)
 	reqResp := make(map[string]string)
 	// Load the recording
-	suite.NoError(loadReqResp("../testdata/organization_src-d_2019-10-08.gob", reqResp), "Failed to read the recordings")
+	suite.NoError(loadReqResp(orgRecFile, reqResp), "Failed to read the recordings")
 	// Setup the downloader with RoundTrip functionality.
 	// Not using the NewStdoutDownloader initialization because it overides the transport
 	downloader := &Downloader{
@@ -424,10 +424,9 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownloadWithDB() {
 // TestOfflineRepositoryDownload Tests a large repository by replaying recorded responses and stores the results in postgresql
 func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithDB() {
 	t := suite.T()
-	checkOS(t)
 	reqResp := make(map[string]string)
 	// Load the recording
-	suite.NoError(loadReqResp("../testdata/repository_src-d_gitbase_2019-10-08.gob", reqResp), "Failed to read the recordings")
+	suite.NoError(loadReqResp(repoRecFile, reqResp), "Failed to read the recordings")
 	downloader := &Downloader{
 		storer: &store.DB{DB: suite.db},
 		client: githubv4.NewClient(&http.Client{
@@ -457,10 +456,14 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithDB() {
 	}
 }
 
+func (suite *DownloaderTestSuite) BeforeTest(suiteName, testName string) {
+	if strings.HasSuffix(testName, "WithDB") && isOSX() {
+		suite.T().Skip("Don't test OSX with docker psql")
+	}
+}
+
 // AfterTest after specific tests that use the DB, cleans up the DB for later tests
 func (suite *DownloaderTestSuite) AfterTest(suiteName, testName string) {
-	t := suite.T()
-	checkOS(t)
 	if testName == "TestOnlineOrganizationDownloadWithDB" || testName == "TestOfflineOrganizationDownloadWithDB" {
 		// I cleanup with a different version (1 vs. 0), so to clean all the data from the DB
 		suite.downloader.Cleanup(1)
