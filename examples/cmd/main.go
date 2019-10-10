@@ -50,7 +50,7 @@ type Repository struct {
 func (c *Repository) Execute(args []string) error {
 	return c.ExecuteBody(
 		log.New(log.Fields{"owner": c.Owner, "repo": c.Name}),
-		func(httpClient *http.Client, downloader *github.Downloader) error {
+		func(logger log.Logger, httpClient *http.Client, downloader *github.Downloader) error {
 			return downloader.DownloadRepository(context.TODO(), c.Owner, c.Name, c.Version)
 		})
 }
@@ -65,7 +65,7 @@ type Organization struct {
 func (c *Organization) Execute(args []string) error {
 	return c.ExecuteBody(
 		log.New(log.Fields{"org": c.Name}),
-		func(httpClient *http.Client, downloader *github.Downloader) error {
+		func(logger log.Logger, httpClient *http.Client, downloader *github.Downloader) error {
 			return downloader.DownloadOrganization(context.TODO(), c.Name, c.Version)
 		})
 }
@@ -81,7 +81,7 @@ type Ghsync struct {
 func (c *Ghsync) Execute(args []string) error {
 	return c.ExecuteBody(
 		log.New(log.Fields{"org": c.Name}),
-		func(httpClient *http.Client, downloader *github.Downloader) error {
+		func(logger log.Logger, httpClient *http.Client, downloader *github.Downloader) error {
 			repos, err := listRepositories(context.TODO(), httpClient, c.Name, c.NoForks)
 			if err != nil {
 				return err
@@ -92,11 +92,13 @@ func (c *Ghsync) Execute(args []string) error {
 				return fmt.Errorf("failed to download organization %v: %v", c.Name, err)
 			}
 
-			for _, repo := range repos {
+			for i, repo := range repos {
+				logger.Infof("start downloading '%s'", repo)
 				err = downloader.DownloadRepository(context.TODO(), c.Name, repo, c.Version)
 				if err != nil {
 					return fmt.Errorf("failed to download repository %v/%v: %v", c.Name, repo, err)
 				}
+				logger.Infof("finished downloading '%s' (%d/%d)", repo, i+1, len(repos))
 			}
 
 			return nil
@@ -104,7 +106,7 @@ func (c *Ghsync) Execute(args []string) error {
 		})
 }
 
-type bodyFunc = func(httpClient *http.Client, downloader *github.Downloader) error
+type bodyFunc = func(logger log.Logger, httpClient *http.Client, downloader *github.Downloader) error
 
 func (c *DownloaderCmd) ExecuteBody(logger log.Logger, fn bodyFunc) error {
 	client := oauth2.NewClient(context.TODO(), oauth2.StaticTokenSource(
@@ -153,7 +155,7 @@ func (c *DownloaderCmd) ExecuteBody(logger log.Logger, fn bodyFunc) error {
 	}
 	t0 := time.Now()
 
-	err = fn(client, downloader)
+	err = fn(logger, client, downloader)
 	if err != nil {
 		return err
 	}
