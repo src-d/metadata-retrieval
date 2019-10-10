@@ -78,7 +78,7 @@ func isOSX() bool {
 	if runtime.GOOS == "darwin" {
 		return true
 	}
-	return true
+	return false
 }
 
 // Testing connection documentation, docker-compose and Migrate method
