@@ -469,7 +469,7 @@ func (suite *DownloaderTestSuite) AfterTest(suiteName, testName string) {
 		suite.downloader.Cleanup(1)
 		// Check
 		var countOrgs int
-		err := suite.db.QueryRow("select count(*) from organizations").Scan(&countOrgs)
+		err := suite.db.QueryRow("select count(*) from organizations_versioned").Scan(&countOrgs)
 		suite.NoError(err, "Failed to count the orgs")
 		suite.Equal(0, countOrgs)
 	} else if testName == "TestOnlineRepositoryDownloadWithDB" || testName == "TestOfflineRepositoryDownloadWithDB" {
@@ -477,7 +477,7 @@ func (suite *DownloaderTestSuite) AfterTest(suiteName, testName string) {
 		suite.downloader.Cleanup(1)
 		// Check
 		var countRepos int
-		err := suite.db.QueryRow("select count(*) from repositories").Scan(&countRepos)
+		err := suite.db.QueryRow("select count(*) from repositories_versioned").Scan(&countRepos)
 		suite.NoError(err, "Failed to count the repos")
 		suite.Equal(0, countRepos)
 	}
