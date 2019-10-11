@@ -73,13 +73,10 @@ func checkToken(t *testing.T) {
 	}
 }
 
-func isOSX() bool {
-	// for local dev purposes where docker is available
-	if os.Getenv("SKIP_OSX_CHECK") == "true" {
-		return false
-	}
+func isOSXOnTravis() bool {
 	// docker service is not supported on osx in Travis: https://docs.travis-ci.com/user/docker/
-	if runtime.GOOS == "darwin" {
+	// but maybe in a local osx dev env so we will skip only in travis
+	if runtime.GOOS == "darwin" && os.Getenv("TRAVIS") == "true" {
 		return true
 	}
 	return false
@@ -143,7 +140,7 @@ type DownloaderTestSuite struct {
 }
 
 func (suite *DownloaderTestSuite) SetupSuite() {
-	if !isOSX() {
+	if !isOSXOnTravis() {
 		suite.db = getDB(suite.T())
 		suite.NotNil(suite.db)
 	}
@@ -260,25 +257,7 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownload() {
 	reqResp := make(map[string]string)
 	suite.NoError(loadReqResp(repoRecFile, reqResp), "Failed to read the offline recordings")
 	storer := &testutils.Memory{}
-	downloader := &Downloader{
-		storer: storer,
-		client: githubv4.NewClient(&http.Client{
-			Transport: RoundTripFunc(func(req *http.Request) *http.Response {
-				// consume request body
-				savecl := req.ContentLength
-				bodyBytes, _ := ioutil.ReadAll(req.Body)
-				defer req.Body.Close()
-				// recreate request body
-				req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
-				req.ContentLength = savecl
-				data := reqResp[string(bodyBytes)]
-				return &http.Response{
-					StatusCode: 200,
-					Body:       ioutil.NopCloser(bytes.NewBufferString(data)),
-					Header:     make(http.Header),
-				}
-			})}),
-	}
+	downloader := getRoundTripDownloader(reqResp, storer)
 	tests, err := loadTests("../testdata/offline-repository-tests.json")
 	suite.NoError(err, "Failed to read the offline tests")
 	for _, test := range tests.RepositoryTests {
@@ -445,25 +424,8 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithDB() {
 	reqResp := make(map[string]string)
 	// Load the recording
 	suite.NoError(loadReqResp(repoRecFile, reqResp), "Failed to read the recordings")
-	downloader := &Downloader{
-		storer: &store.DB{DB: suite.db},
-		client: githubv4.NewClient(&http.Client{
-			Transport: RoundTripFunc(func(req *http.Request) *http.Response {
-				// consume request body
-				savecl := req.ContentLength
-				bodyBytes, _ := ioutil.ReadAll(req.Body)
-				defer req.Body.Close()
-				// recreate request body
-				req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
-				req.ContentLength = savecl
-				data := reqResp[string(bodyBytes)]
-				return &http.Response{
-					StatusCode: 200,
-					Body:       ioutil.NopCloser(bytes.NewBufferString(data)),
-					Header:     make(http.Header),
-				}
-			})}),
-	}
+	storer := &store.DB{DB: suite.db}
+	downloader := getRoundTripDownloader(reqResp, storer)
 	downloader.SetActiveVersion(0)
 	suite.downloader = downloader
 	tests, err := loadTests("../testdata/offline-repository-tests.json")
@@ -477,7 +439,7 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithDB() {
 }
 
 func (suite *DownloaderTestSuite) BeforeTest(suiteName, testName string) {
-	if strings.HasSuffix(testName, "WithDB") && isOSX() {
+	if strings.HasSuffix(testName, "WithDB") && isOSXOnTravis() {
 		suite.T().Skip("Don't test OSX with docker psql")
 	}
 }
