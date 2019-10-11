@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/src-d/metadata-retrieval/database"
 	"github.com/src-d/metadata-retrieval/github/store"
 	"github.com/src-d/metadata-retrieval/testutils"
@@ -69,11 +70,14 @@ func loadTests(filepath string) (testutils.Tests, error) {
 func checkToken(t *testing.T) {
 	if os.Getenv("GITHUB_TOKEN") == "" {
 		t.Skip("GITHUB_TOKEN is not set")
-		return
 	}
 }
 
 func isOSX() bool {
+	// for local dev purposes where docker is available
+	if os.Getenv("SKIP_OSX_CHECK") == "true" {
+		return false
+	}
 	// docker service is not supported on osx in Travis: https://docs.travis-ci.com/user/docker/
 	if runtime.GOOS == "darwin" {
 		return true
@@ -83,8 +87,12 @@ func isOSX() bool {
 
 // Testing connection documentation, docker-compose and Migrate method
 func getDB(t *testing.T) (db *sql.DB) {
-	const DBURL = "postgres://user:password@localhost:5432/ghsync?sslmode=disable"
-	db, err := sql.Open("postgres", DBURL)
+	DBURL := fmt.Sprintf("postgres://%s:%s@localhost:5432/%s?sslmode=disable", os.Getenv("PSQL_USER"), os.Getenv("PSQL_PWD"), os.Getenv("PSQL_DB"))
+	err := backoff.Retry(func() error {
+		var err error
+		db, err = sql.Open("postgres", DBURL)
+		return err
+	}, backoff.NewExponentialBackOff())
 	require.NoError(t, err, "DB URL is not working")
 	if err = db.Ping(); err != nil {
 		require.Nil(t, err, "DB connection is not working")
@@ -204,16 +212,8 @@ func testOrg(t *testing.T, oracle testutils.OrganizationTest, d *Downloader, sto
 	require.Len(storer.Users, oracle.NumOfUsers)
 }
 
-// TestOfflineOrganizationDownload Tests a large organization by replaying recorded responses
-func (suite *DownloaderTestSuite) TestOfflineOrganizationDownload() {
-	t := suite.T()
-	reqResp := make(map[string]string)
-	// Load the recording
-	suite.NoError(loadReqResp(orgRecFile, reqResp), "Failed to read the offline recordings")
-	// Setup the downloader with RoundTrip functionality.
-	// Not using the NewStdoutDownloader initialization because it overides the transport
-	storer := &testutils.Memory{}
-	downloader := &Downloader{
+func getRoundTripDownloader(reqResp map[string]string, storer storer) *Downloader {
+	return &Downloader{
 		storer: storer,
 		client: githubv4.NewClient(&http.Client{
 			Transport: RoundTripFunc(func(req *http.Request) *http.Response {
@@ -232,6 +232,18 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownload() {
 				}
 			})}),
 	}
+}
+
+// TestOfflineOrganizationDownload Tests a large organization by replaying recorded responses
+func (suite *DownloaderTestSuite) TestOfflineOrganizationDownload() {
+	t := suite.T()
+	reqResp := make(map[string]string)
+	// Load the recording
+	suite.NoError(loadReqResp(orgRecFile, reqResp), "Failed to read the offline recordings")
+	// Setup the downloader with RoundTrip functionality.
+	// Not using the NewStdoutDownloader initialization because it overides the transport
+	storer := &testutils.Memory{}
+	downloader := getRoundTripDownloader(reqResp, storer)
 	tests, err := loadTests("../testdata/offline-organization-tests.json")
 	suite.NoError(err, "Failed to read the offline tests")
 	for _, test := range tests.OrganizationsTests {
@@ -328,39 +340,59 @@ func testRepoWithDB(t *testing.T, oracle testutils.RepositoryTest, d *Downloader
 	err := d.DownloadRepository(context.TODO(), oracle.Owner, oracle.Repository, oracle.Version)
 	require := require.New(t) // Make a new require object for the specified test, so no need to pass it around
 	require.Nil(err)
-	var (
-		htmlurl               string
-		createdAt             time.Time
-		private               bool
-		archived              bool
-		hasWiki               bool
-		topics                []string
-		numOfIssues           int
-		numOfIssueComments    int
-		numOfPRs              int
-		numOfPRReviewComments int
-	)
-	err = db.QueryRow("select htmlurl, created_at, private, archived, has_wiki, topics from repositories where owner_login = $1 and name = $2", oracle.Owner, oracle.Repository).Scan(&htmlurl, &createdAt, &private, &archived, &hasWiki, pq.Array(&topics))
-	require.NoError(err, "Error in retrieving repo")
-	err = db.QueryRow("select count(*) from issues where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfIssues)
+	checkRepo(require, db, oracle)
+	checkIssues(require, db, oracle)
+	checkIssuePRComments(require, db, oracle)
+	checkPRs(require, db, oracle)
+	checkPRReviewComments(require, db, oracle)
+}
+
+func checkIssues(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest) {
+	var numOfIssues int
+	err := db.QueryRow("select count(*) from issues where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfIssues)
 	require.NoError(err, "Error in retrieving issues")
-	err = db.QueryRow("select count(*) from issue_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfIssueComments)
+	require.Equal(numOfIssues, oracle.NumOfIssues, "Issues")
+}
+
+func checkIssuePRComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest) {
+	var numOfComments int
+	err := db.QueryRow("select count(*) from issue_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfComments)
 	require.NoError(err, "Error in retrieving issue comments")
-	err = db.QueryRow("select count(*) from pull_requests where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRs)
+	// NB: ghsync saves both Issue and PRs comments in the same table, issue_comments => See store/db.go comment
+	require.Equal(oracle.NumOfPRComments+oracle.NumOfIssueComments, numOfComments, "Issue and PR Comments")
+}
+
+func checkPRs(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest) {
+	var numOfPRs int
+	err := db.QueryRow("select count(*) from pull_requests where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRs)
 	require.NoError(err, "Error in retrieving pull requests")
-	err = db.QueryRow("select count(*) from pull_request_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRReviewComments)
+	require.Equal(oracle.NumOfPRs, numOfPRs, "PRs")
+}
+
+func checkPRReviewComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest) {
+	var numOfPRReviewComments int
+	err := db.QueryRow("select count(*) from pull_request_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRReviewComments)
 	require.NoError(err, "Error in retrieving pull request comments")
+	require.Equal(oracle.NumOfPRReviewComments, numOfPRReviewComments, "PR Review Comments")
+}
+
+func checkRepo(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest) {
+	var (
+		htmlurl   string
+		createdAt time.Time
+		private   bool
+		archived  bool
+		hasWiki   bool
+		topics    []string
+	)
+	err := db.QueryRow("select htmlurl, created_at, private, archived, has_wiki, topics from repositories where owner_login = $1 and name = $2", oracle.Owner, oracle.Repository).Scan(&htmlurl, &createdAt, &private, &archived, &hasWiki, pq.Array(&topics))
+	require.NoError(err, "Error in retrieving repo")
 	require.Equal(oracle.URL, htmlurl)
 	require.Equal(oracle.CreatedAt, createdAt.String())
 	require.Equal(oracle.IsPrivate, private)
 	require.Equal(oracle.IsArchived, archived)
 	require.Equal(oracle.HasWiki, hasWiki)
 	require.ElementsMatch(oracle.Topics, topics)
-	require.Equal(numOfIssues, oracle.NumOfIssues, "Issues")
-	require.Equal(oracle.NumOfPRs, numOfPRs, "PRs")
-	// NB: ghsync saves both Issue and PRs comments in the same table, issue_comments => See store/db.go comment
-	require.Equal((oracle.NumOfPRComments + oracle.NumOfIssueComments), numOfIssueComments, "Issue and PR Comments")
-	require.Equal(oracle.NumOfPRReviewComments, numOfPRReviewComments, "PR Review Comments")
 }
 
 // TestOnlineRepositoryDownloadWithDB Tests the download of known and fixed GitHub organization and stores it in a Postgresql DB
@@ -393,26 +425,9 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownloadWithDB() {
 	suite.NoError(loadReqResp(orgRecFile, reqResp), "Failed to read the recordings")
 	// Setup the downloader with RoundTrip functionality.
 	// Not using the NewStdoutDownloader initialization because it overides the transport
-	downloader := &Downloader{
-		storer: &store.DB{DB: suite.db},
-		client: githubv4.NewClient(&http.Client{
-			Transport: RoundTripFunc(func(req *http.Request) *http.Response {
-				// consume request body
-				savecl := req.ContentLength
-				bodyBytes, _ := ioutil.ReadAll(req.Body)
-				defer req.Body.Close()
-				// recreate request body
-				req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
-				req.ContentLength = savecl
-				data := reqResp[string(bodyBytes)]
-				return &http.Response{
-					StatusCode: 200,
-					Body:       ioutil.NopCloser(bytes.NewBufferString(data)),
-					Header:     make(http.Header),
-				}
-			})}),
-	}
-	downloader.SetActiveVersion(0)
+	storer := &store.DB{DB: suite.db}
+	downloader := getRoundTripDownloader(reqResp, storer)
+	downloader.SetActiveVersion(0) // Will create the views
 	suite.downloader = downloader
 	tests, err := loadTests("../testdata/offline-organization-tests.json")
 	suite.NoError(err, "Failed to read the offline tests")
@@ -474,7 +489,7 @@ func (suite *DownloaderTestSuite) AfterTest(suiteName, testName string) {
 		suite.downloader.Cleanup(1)
 		// Check
 		var countOrgs int
-		err := suite.db.QueryRow("select count(*) from organizations_versioned").Scan(&countOrgs)
+		err := suite.db.QueryRow("select count(*) from organizations").Scan(&countOrgs)
 		suite.NoError(err, "Failed to count the orgs")
 		suite.Equal(0, countOrgs)
 	} else if testName == "TestOnlineRepositoryDownloadWithDB" || testName == "TestOfflineRepositoryDownloadWithDB" {
@@ -482,7 +497,7 @@ func (suite *DownloaderTestSuite) AfterTest(suiteName, testName string) {
 		suite.downloader.Cleanup(1)
 		// Check
 		var countRepos int
-		err := suite.db.QueryRow("select count(*) from repositories_versioned").Scan(&countRepos)
+		err := suite.db.QueryRow("select count(*) from repositories").Scan(&countRepos)
 		suite.NoError(err, "Failed to count the repos")
 		suite.Equal(0, countRepos)
 	}
