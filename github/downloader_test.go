@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cenkalti/backoff"
 	"github.com/src-d/metadata-retrieval/database"
 	"github.com/src-d/metadata-retrieval/github/store"
 	"github.com/src-d/metadata-retrieval/testutils"
 
+	"github.com/cenkalti/backoff"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/lib/pq"
 	"github.com/shurcooL/githubv4"
@@ -33,8 +33,14 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const orgRecFile = "../testdata/organization_src-d_2019-10-11.gob.gz"
-const repoRecFile = "../testdata/repository_src-d_gitbase_2019-10-11.gob.gz"
+const (
+	orgRecFile       = "../testdata/organization_src-d_2019-10-11.gob.gz"
+	repoRecFile      = "../testdata/repository_src-d_gitbase_2019-10-11.gob.gz"
+	onlineRepoTests  = "../testdata/online-repository-tests.json"
+	onlineOrgTests   = "../testdata/online-organization-tests.json"
+	offlineRepoTests = "../testdata/offline-repository-tests.json"
+	offlineOrgTests  = "../testdata/offline-organization-tests.json"
+)
 
 // loads requests-response data from a gob file
 func loadReqResp(filepath string, reqResp map[string]string) error {
@@ -155,7 +161,7 @@ func (suite *DownloaderTestSuite) SetupSuite() {
 func (suite *DownloaderTestSuite) TestOnlineRepositoryDownload() {
 	t := suite.T()
 	checkToken(t)
-	tests, err := loadTests("../testdata/online-repository-tests.json")
+	tests, err := loadTests(onlineRepoTests)
 	suite.NoError(err, "Failed to read the testcases")
 	downloader, storer, err := getDownloader()
 	suite.NoError(err, "Failed to instantiate downloader")
@@ -199,7 +205,7 @@ func testRepo(t *testing.T, oracle testutils.RepositoryTest, d *Downloader, stor
 func (suite *DownloaderTestSuite) TestOnlineOrganizationDownload() {
 	t := suite.T()
 	checkToken(t)
-	tests, err := loadTests("../testdata/online-organization-tests.json")
+	tests, err := loadTests(onlineOrgTests)
 	suite.NoError(err, "Failed to read the testcases")
 	downloader, storer, err := getDownloader()
 	suite.NoError(err, "Failed to instantiate downloader")
@@ -255,7 +261,7 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownload() {
 	// Not using the NewStdoutDownloader initialization because it overides the transport
 	storer := &testutils.Memory{}
 	downloader := getRoundTripDownloader(reqResp, storer)
-	tests, err := loadTests("../testdata/offline-organization-tests.json")
+	tests, err := loadTests(offlineOrgTests)
 	suite.NoError(err, "Failed to read the offline tests")
 	for _, test := range tests.OrganizationsTests {
 		test := test
@@ -272,7 +278,7 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownload() {
 	suite.NoError(loadReqResp(repoRecFile, reqResp), "Failed to read the offline recordings")
 	storer := &testutils.Memory{}
 	downloader := getRoundTripDownloader(reqResp, storer)
-	tests, err := loadTests("../testdata/offline-repository-tests.json")
+	tests, err := loadTests(offlineRepoTests)
 	suite.NoError(err, "Failed to read the offline tests")
 	for _, test := range tests.RepositoryTests {
 		test := test
@@ -311,7 +317,7 @@ func testOrgWithDB(t *testing.T, oracle testutils.OrganizationTest, d *Downloade
 func (suite *DownloaderTestSuite) TestOnlineOrganizationDownloadWithDB() {
 	t := suite.T()
 	checkToken(t)
-	tests, err := loadTests("../testdata/online-organization-tests.json")
+	tests, err := loadTests(onlineOrgTests)
 	suite.NoError(err, "Failed to read the online tests")
 	downloader, err := NewDownloader(oauth2.NewClient(
 		context.TODO(),
@@ -409,7 +415,7 @@ func checkRepo(require *require.Assertions, db *sql.DB, oracle testutils.Reposit
 func (suite *DownloaderTestSuite) TestOnlineRepositoryDownloadWithDB() {
 	t := suite.T()
 	checkToken(t)
-	tests, err := loadTests("../testdata/online-repository-tests.json")
+	tests, err := loadTests(onlineRepoTests)
 	suite.NoError(err, "Failed to read the online tests")
 	downloader, err := NewDownloader(oauth2.NewClient(
 		context.TODO(),
@@ -439,7 +445,7 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownloadWithDB() {
 	downloader := getRoundTripDownloader(reqResp, storer)
 	downloader.SetActiveVersion(0) // Will create the views
 	suite.downloader = downloader
-	tests, err := loadTests("../testdata/offline-organization-tests.json")
+	tests, err := loadTests(offlineOrgTests)
 	suite.NoError(err, "Failed to read the offline tests")
 	for _, test := range tests.OrganizationsTests {
 		test := test
@@ -459,7 +465,7 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithDB() {
 	downloader := getRoundTripDownloader(reqResp, storer)
 	downloader.SetActiveVersion(0)
 	suite.downloader = downloader
-	tests, err := loadTests("../testdata/offline-repository-tests.json")
+	tests, err := loadTests(offlineRepoTests)
 	suite.NoError(err, "Failed to read the offline tests")
 	for _, test := range tests.RepositoryTests {
 		test := test
