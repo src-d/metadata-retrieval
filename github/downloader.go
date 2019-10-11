@@ -19,8 +19,11 @@ type connectionType struct {
 	PageSize githubv4.Int
 }
 
+func (c connectionType) Page() string   { return fmt.Sprintf("%sPage", c.Name) }
+func (c connectionType) Cursor() string { return fmt.Sprintf("%sCursor", c.Name) }
+
 var (
-	topicsType                    = connectionType{"topics", 10}
+	topicsType                    = connectionType{"repositoryTopics", 10}
 	assigneesType                 = connectionType{"assignees", 2}
 	issuesType                    = connectionType{"issues", 50}
 	issueCommentsType             = connectionType{"issueComments", 10}
@@ -119,24 +122,14 @@ func (d Downloader) DownloadRepository(ctx context.Context, owner string, name s
 	variables := map[string]interface{}{
 		"owner": githubv4.String(owner),
 		"name":  githubv4.String(name),
-
-		"assigneesPage":                 assigneesType.PageSize,
-		"issueCommentsPage":             issueCommentsType.PageSize,
-		"issuesPage":                    issuesType.PageSize,
-		"labelsPage":                    labelsType.PageSize,
-		"pullRequestReviewCommentsPage": pullRequestReviewCommentsType.PageSize,
-		"pullRequestReviewsPage":        pullRequestReviewsType.PageSize,
-		"pullRequestsPage":              pullRequestsType.PageSize,
-		"repositoryTopicsPage":          topicsType.PageSize,
-
-		"assigneesCursor":                 (*githubv4.String)(nil),
-		"issueCommentsCursor":             (*githubv4.String)(nil),
-		"issuesCursor":                    (*githubv4.String)(nil),
-		"labelsCursor":                    (*githubv4.String)(nil),
-		"pullRequestReviewCommentsCursor": (*githubv4.String)(nil),
-		"pullRequestReviewsCursor":        (*githubv4.String)(nil),
-		"pullRequestsCursor":              (*githubv4.String)(nil),
-		"repositoryTopicsCursor":          (*githubv4.String)(nil),
+	}
+	connections := []connectionType{
+		assigneesType, issueCommentsType, issuesType, labelsType, topicsType,
+		pullRequestReviewCommentsType, pullRequestReviewsType, pullRequestsType,
+	}
+	for _, c := range connections {
+		variables[c.Page()] = c.PageSize
+		variables[c.Cursor()] = (*githubv4.String)(nil)
 	}
 
 	err = d.client.Query(ctx, &q, variables)
@@ -287,8 +280,8 @@ func (d Downloader) downloadConnection(
 	}
 	for res.GetPageInfo().HasNextPage {
 		count += res.Len()
-		variables[t.Name+"Page"] = getPerPage(res.GetTotalCount(), count, t.PageSize, limit)
-		variables[t.Name+"Cursor"] = githubv4.String(res.GetPageInfo().EndCursor)
+		variables[t.Page()] = getPerPage(res.GetTotalCount(), count, t.PageSize, limit)
+		variables[t.Cursor()] = githubv4.String(res.GetPageInfo().EndCursor)
 
 		if isLoggable && count%int(t.PageSize) == 0 {
 			logger.Infof("%d/%d %s downloaded", count, res.GetTotalCount(), t.Name)
@@ -358,14 +351,11 @@ func (d Downloader) downloadIssues(ctx context.Context, owner string, name strin
 	var q issuesQ
 	variables := map[string]interface{}{
 		"id": githubv4.ID(repository.ID),
-
-		"assigneesPage":     assigneesType.PageSize,
-		"issueCommentsPage": issueCommentsType.PageSize,
-		"labelsPage":        labelsType.PageSize,
-
-		"assigneesCursor":     (*githubv4.String)(nil),
-		"issueCommentsCursor": (*githubv4.String)(nil),
-		"labelsCursor":        (*githubv4.String)(nil),
+	}
+	connections := []connectionType{assigneesType, issueCommentsType, labelsType}
+	for _, c := range connections {
+		variables[c.Page()] = c.PageSize
+		variables[c.Cursor()] = (*githubv4.String)(nil)
 	}
 
 	process := func(res Connection) error {
@@ -514,18 +504,13 @@ func (d Downloader) downloadPullRequests(ctx context.Context, owner string, name
 	var q pullRequestsQ
 	variables := map[string]interface{}{
 		"id": githubv4.ID(repository.ID),
-
-		"assigneesPage":                 assigneesType.PageSize,
-		"issueCommentsPage":             issueCommentsType.PageSize,
-		"labelsPage":                    labelsType.PageSize,
-		"pullRequestReviewCommentsPage": pullRequestReviewCommentsType.PageSize,
-		"pullRequestReviewsPage":        pullRequestReviewsType.PageSize,
-
-		"assigneesCursor":                 (*githubv4.String)(nil),
-		"issueCommentsCursor":             (*githubv4.String)(nil),
-		"labelsCursor":                    (*githubv4.String)(nil),
-		"pullRequestReviewCommentsCursor": (*githubv4.String)(nil),
-		"pullRequestReviewsCursor":        (*githubv4.String)(nil),
+	}
+	connections := []connectionType{
+		assigneesType, issueCommentsType, labelsType,
+		pullRequestReviewCommentsType, pullRequestReviewsType}
+	for _, c := range connections {
+		variables[c.Page()] = c.PageSize
+		variables[c.Cursor()] = (*githubv4.String)(nil)
 	}
 
 	process := func(res Connection) error {
@@ -678,10 +663,9 @@ func (d Downloader) downloadPullRequestReviews(ctx context.Context, owner string
 	var q pullRequestReviewsQ
 	variables := map[string]interface{}{
 		"id": githubv4.ID(pr.ID),
-
-		"pullRequestReviewCommentsPage":   pullRequestReviewCommentsType.PageSize,
-		"pullRequestReviewCommentsCursor": (*githubv4.String)(nil),
 	}
+	variables[pullRequestReviewCommentsType.Page()] = pullRequestReviewCommentsType.PageSize
+	variables[pullRequestReviewCommentsType.Cursor()] = (*githubv4.String)(nil)
 
 	process := func(res Connection) error {
 		reviews := res.(graphql.PullRequestReviewConnection)
@@ -766,10 +750,9 @@ func (d Downloader) DownloadOrganization(ctx context.Context, name string, versi
 	// queries only request either Issues or PullRequests
 	variables := map[string]interface{}{
 		"organizationLogin": githubv4.String(name),
-
-		"membersWithRolePage":   membersWithRole.PageSize,
-		"membersWithRoleCursor": (*githubv4.String)(nil),
 	}
+	variables[membersWithRole.Page()] = membersWithRole.PageSize
+	variables[membersWithRole.Cursor()] = (*githubv4.String)(nil)
 
 	err = d.client.Query(ctx, &q, variables)
 	if err != nil {
