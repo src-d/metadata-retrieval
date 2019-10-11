@@ -14,40 +14,22 @@ import (
 	"gopkg.in/src-d/go-log.v1"
 )
 
-const (
-	assigneesPage                 = 2
-	issueCommentsPage             = 10
-	issuesPage                    = 50
-	labelsPage                    = 2
-	membersWithRolePage           = 100
-	pullRequestReviewCommentsPage = 5
-	pullRequestReviewsPage        = 5
-	pullRequestsPage              = 50
-	repositoryTopicsPage          = 10
+type connectionType struct {
+	Name     string
+	PageSize githubv4.Int
+}
 
-	// to track progress of sub-resources only each N page to avoid log flooding
-	logEachPageN = 3
+var (
+	topicsType                    = connectionType{"topics", 10}
+	assigneesType                 = connectionType{"assignees", 2}
+	issuesType                    = connectionType{"issues", 50}
+	issueCommentsType             = connectionType{"issueComments", 10}
+	pullRequestsType              = connectionType{"pullRequests", 50}
+	pullRequestReviewsType        = connectionType{"pullRequestReviews", 5}
+	pullRequestReviewCommentsType = connectionType{"pullRequestReviewComments", 5}
+	labelsType                    = connectionType{"labels", 2}
+	membersWithRole               = connectionType{"membersWithRole", 100}
 )
-
-// getPerPage calculates how many resources to request based on total number and number of already downloaded
-func getPerPage(total, count, fallback int) githubv4.Int {
-	return getPerPageLimited(total, count, fallback, 100)
-}
-
-// getPerPageLimited same as getPerPage but accepts non-maximum limit
-// should be used for heavy requests like pull requests to avoid 502 from github
-func getPerPageLimited(total, count, fallback, limit int) githubv4.Int {
-	perPage := total - count
-	if perPage > limit {
-		perPage = limit
-	}
-	// in case entities appeared during downloading process
-	if perPage <= 0 {
-		perPage = fallback
-	}
-
-	return githubv4.Int(perPage)
-}
 
 type storer interface {
 	SaveOrganization(ctx context.Context, organization *graphql.Organization) error
@@ -138,14 +120,14 @@ func (d Downloader) DownloadRepository(ctx context.Context, owner string, name s
 		"owner": githubv4.String(owner),
 		"name":  githubv4.String(name),
 
-		"assigneesPage":                 githubv4.Int(assigneesPage),
-		"issueCommentsPage":             githubv4.Int(issueCommentsPage),
-		"issuesPage":                    githubv4.Int(issuesPage),
-		"labelsPage":                    githubv4.Int(labelsPage),
-		"pullRequestReviewCommentsPage": githubv4.Int(pullRequestReviewCommentsPage),
-		"pullRequestReviewsPage":        githubv4.Int(pullRequestReviewsPage),
-		"pullRequestsPage":              githubv4.Int(pullRequestsPage),
-		"repositoryTopicsPage":          githubv4.Int(repositoryTopicsPage),
+		"assigneesPage":                 assigneesType.PageSize,
+		"issueCommentsPage":             issueCommentsType.PageSize,
+		"issuesPage":                    issuesType.PageSize,
+		"labelsPage":                    labelsType.PageSize,
+		"pullRequestReviewCommentsPage": pullRequestReviewCommentsType.PageSize,
+		"pullRequestReviewsPage":        pullRequestReviewsType.PageSize,
+		"pullRequestsPage":              pullRequestsType.PageSize,
+		"repositoryTopicsPage":          topicsType.PageSize,
 
 		"assigneesCursor":                 (*githubv4.String)(nil),
 		"issueCommentsCursor":             (*githubv4.String)(nil),
@@ -250,351 +232,294 @@ func (d Downloader) RateRemaining(ctx context.Context) (int, error) {
 	return q.RateLimit.Remaining, nil
 }
 
-func (d Downloader) downloadTopics(ctx context.Context, repository *graphql.Repository) ([]string, error) {
-	logger := ctxlog.Get(ctx)
-	logger.Infof("start downloading topics")
-	defer logger.Infof("finished downloading topics")
+// Connection is a unified interface for GraphQL connections
+type Connection interface {
+	Len() int
+	GetTotalCount() int
+	GetPageInfo() graphql.PageInfo
+}
 
-	topics := repository.RepositoryTopics
-	names := []string{}
+// Query is a GraphQL query that returns Connection
+type Query interface {
+	Connection() Connection
+}
 
-	// Topics included in the first page
-	for _, topicNode := range topics.Nodes {
-		names = append(names, topicNode.Topic.Name)
+// getPerPage calculates how many resources to request based on total number and number of already downloaded
+func getPerPage(total, count int, fallback, limit githubv4.Int) githubv4.Int {
+	perPage := githubv4.Int(total - count)
+	if perPage > limit {
+		perPage = limit
+	}
+	// in case entities appeared during downloading process
+	if perPage <= 0 {
+		perPage = fallback
 	}
 
+	return perPage
+}
+
+func (d Downloader) downloadConnection(
+	ctx context.Context,
+	t connectionType,
+	res Connection,
+	q Query,
+	variables map[string]interface{},
+	process func(Connection) error,
+) error {
+	logger := ctxlog.Get(ctx)
+	// logging only top-level resources
+	isLoggable := t == issuesType || t == pullRequestsType || t == membersWithRole
+	if isLoggable {
+		logger.Infof("start downloading %s", t.Name)
+		defer logger.Infof("finished downloading %s", t.Name)
+	}
+
+	// Save resources included in the first page
+	if err := process(res); err != nil {
+		return fmt.Errorf("can not process %s: %s", t.Name, err)
+	}
+
+	var count int
+	limit := githubv4.Int(100)
+	// github timeouts and returns 502 too often with 100 limit
+	if t == pullRequestsType {
+		limit = t.PageSize
+	}
+	for res.GetPageInfo().HasNextPage {
+		count += res.Len()
+		variables[t.Name+"Page"] = getPerPage(res.GetTotalCount(), count, t.PageSize, limit)
+		variables[t.Name+"Cursor"] = githubv4.String(res.GetPageInfo().EndCursor)
+
+		if isLoggable && count%int(t.PageSize) == 0 {
+			logger.Infof("%d/%d %s downloaded", count, res.GetTotalCount(), t.Name)
+		}
+
+		if err := d.client.Query(ctx, q, variables); err != nil {
+			return fmt.Errorf("query to %s failed: %s", t.Name, err)
+		}
+
+		res = q.Connection()
+		if err := process(res); err != nil {
+			return fmt.Errorf("can not process %s: %s", t.Name, err)
+		}
+	}
+
+	return nil
+}
+
+type repositoryTopicsQ struct {
+	Node struct {
+		Repository struct {
+			RepositoryTopics graphql.RepositoryTopicsConnection `graphql:"repositoryTopics(first: $repositoryTopicsPage, after: $repositoryTopicsCursor)"`
+		} `graphql:"... on Repository"`
+	} `graphql:"node(id:$id)"`
+}
+
+func (q *repositoryTopicsQ) Connection() Connection {
+	return q.Node.Repository.RepositoryTopics
+}
+
+func (d Downloader) downloadTopics(ctx context.Context, repository *graphql.Repository) ([]string, error) {
+	var q repositoryTopicsQ
 	variables := map[string]interface{}{
 		"id": githubv4.ID(repository.ID),
 	}
 
-	// if there are more topics, loop over all the pages
-	hasNextPage := topics.PageInfo.HasNextPage
-	endCursor := topics.PageInfo.EndCursor
-
-	var count int
-	for hasNextPage {
-		count += len(topics.Nodes)
-
-		// get only repository topics
-		var q struct {
-			Node struct {
-				Repository struct {
-					RepositoryTopics graphql.RepositoryTopicsConnection `graphql:"repositoryTopics(first: $repositoryTopicsPage, after: $repositoryTopicsCursor)"`
-				} `graphql:"... on Repository"`
-			} `graphql:"node(id:$id)"`
-		}
-
-		variables["repositoryTopicsPage"] = getPerPage(topics.TotalCount, count, repositoryTopicsPage)
-		variables["repositoryTopicsCursor"] = githubv4.String(endCursor)
-
-		err := d.client.Query(ctx, &q, variables)
-		if err != nil {
-			return nil, fmt.Errorf("RepositoryTopics query failed: %v", err)
-		}
-
-		topics = q.Node.Repository.RepositoryTopics
-		for _, topicNode := range q.Node.Repository.RepositoryTopics.Nodes {
+	names := []string{}
+	process := func(res Connection) error {
+		topics := res.(graphql.RepositoryTopicsConnection)
+		for _, topicNode := range topics.Nodes {
 			names = append(names, topicNode.Topic.Name)
 		}
 
-		hasNextPage = topics.PageInfo.HasNextPage
-		endCursor = topics.PageInfo.EndCursor
+		return nil
 	}
 
-	return names, nil
+	err := d.downloadConnection(ctx, topicsType, repository.RepositoryTopics, &q, variables, process)
+	if err != nil {
+		return nil, err
+	}
+	return names, err
+}
+
+type issuesQ struct {
+	Node struct {
+		Repository struct {
+			Issues graphql.IssueConnection `graphql:"issues(first: $issuesPage, after: $issuesCursor)"`
+		} `graphql:"... on Repository"`
+	} `graphql:"node(id:$id)"`
+}
+
+func (q *issuesQ) Connection() Connection {
+	return q.Node.Repository.Issues
 }
 
 func (d Downloader) downloadIssues(ctx context.Context, owner string, name string, repository *graphql.Repository) error {
-	logger := ctxlog.Get(ctx)
-	logger.Infof("start downloading issues")
-	defer logger.Infof("finished downloading issues")
-
-	issues := repository.Issues
-	process := func(issue *graphql.Issue) error {
-		assignees, err := d.downloadIssueAssignees(ctx, issue)
-		if err != nil {
-			return err
-		}
-
-		labels, err := d.downloadIssueLabels(ctx, issue)
-		if err != nil {
-			return err
-		}
-
-		err = d.storer.SaveIssue(ctx, owner, name, issue, assignees, labels)
-		if err != nil {
-			return err
-		}
-		return d.downloadIssueComments(ctx, owner, name, issue)
-	}
-
-	// Save issues included in the first page
-	for _, issue := range issues.Nodes {
-		err := process(&issue)
-		if err != nil {
-			return fmt.Errorf("failed to process issue %v/%v #%v: %v", owner, name, issue.Number, err)
-		}
-	}
-
+	var q issuesQ
 	variables := map[string]interface{}{
 		"id": githubv4.ID(repository.ID),
 
-		"assigneesPage":     githubv4.Int(assigneesPage),
-		"issueCommentsPage": githubv4.Int(issueCommentsPage),
-		"labelsPage":        githubv4.Int(labelsPage),
+		"assigneesPage":     assigneesType.PageSize,
+		"issueCommentsPage": issueCommentsType.PageSize,
+		"labelsPage":        labelsType.PageSize,
 
 		"assigneesCursor":     (*githubv4.String)(nil),
 		"issueCommentsCursor": (*githubv4.String)(nil),
 		"labelsCursor":        (*githubv4.String)(nil),
 	}
 
-	// if there are more issues, loop over all the pages
-	hasNextPage := issues.PageInfo.HasNextPage
-	endCursor := issues.PageInfo.EndCursor
-
-	var count int
-	for hasNextPage {
-		count += len(issues.Nodes)
-		if count%(issuesPage*logEachPageN) == 0 {
-			logger.Infof("%d/%d issues downloaded", count, issues.TotalCount)
-		}
-
-		// get only issues
-		var q struct {
-			Node struct {
-				Repository struct {
-					Issues graphql.IssueConnection `graphql:"issues(first: $issuesPage, after: $issuesCursor)"`
-				} `graphql:"... on Repository"`
-			} `graphql:"node(id:$id)"`
-		}
-
-		variables["issuesPage"] = getPerPage(issues.TotalCount, count, issuesPage)
-		variables["issuesCursor"] = githubv4.String(endCursor)
-
-		err := d.client.Query(ctx, &q, variables)
-		if err != nil {
-			return fmt.Errorf("failed to query issues for repository %v: %v", repository.NameWithOwner, err)
-		}
-
-		issues = q.Node.Repository.Issues
+	process := func(res Connection) error {
+		issues := res.(graphql.IssueConnection)
 		for _, issue := range issues.Nodes {
-			err := process(&issue)
+			assignees, err := d.downloadIssueAssignees(ctx, &issue)
 			if err != nil {
-				return fmt.Errorf("failed to process issue %v #%v: %v", repository.NameWithOwner, issue.Number, err)
+				return err
 			}
-		}
 
-		hasNextPage = issues.PageInfo.HasNextPage
-		endCursor = issues.PageInfo.EndCursor
-	}
-
-	return nil
-}
-
-func (d Downloader) downloadIssueAssignees(ctx context.Context, issue *graphql.Issue) ([]string, error) {
-	assignees := issue.Assignees
-	logins := []string{}
-
-	// Assignees included in the first page
-	for _, node := range assignees.Nodes {
-		logins = append(logins, node.Login)
-	}
-
-	variables := map[string]interface{}{
-		"id": githubv4.ID(issue.ID),
-	}
-
-	// if there are more assignees, loop over all the pages
-	hasNextPage := assignees.PageInfo.HasNextPage
-	endCursor := assignees.PageInfo.EndCursor
-
-	var count int
-	for hasNextPage {
-		count += len(assignees.Nodes)
-
-		// get only issue assignees
-		var q struct {
-			Node struct {
-				Issue struct {
-					Assignees graphql.UserConnection `graphql:"assignees(first: $assigneesPage, after: $assigneesCursor)"`
-				} `graphql:"... on Issue"`
-			} `graphql:"node(id:$id)"`
-		}
-
-		variables["assigneesPage"] = getPerPage(assignees.TotalCount, count, assigneesPage)
-		variables["assigneesCursor"] = githubv4.String(endCursor)
-
-		err := d.client.Query(ctx, &q, variables)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query issue assignees for issue #%v: %v", issue.Number, err)
-		}
-
-		assignees = q.Node.Issue.Assignees
-		for _, node := range assignees.Nodes {
-			logins = append(logins, node.Login)
-		}
-
-		hasNextPage = assignees.PageInfo.HasNextPage
-		endCursor = assignees.PageInfo.EndCursor
-	}
-
-	return logins, nil
-}
-
-func (d Downloader) downloadIssueLabels(ctx context.Context, issue *graphql.Issue) ([]string, error) {
-	labels := issue.Labels
-	names := []string{}
-
-	// Labels included in the first page
-	for _, node := range labels.Nodes {
-		names = append(names, node.Name)
-	}
-
-	variables := map[string]interface{}{
-		"id": githubv4.ID(issue.ID),
-	}
-
-	// if there are more labels, loop over all the pages
-	hasNextPage := labels.PageInfo.HasNextPage
-	endCursor := labels.PageInfo.EndCursor
-
-	var count int
-	for hasNextPage {
-		count += len(labels.Nodes)
-
-		// get only issue labels
-		var q struct {
-			Node struct {
-				Issue struct {
-					Labels graphql.LabelConnection `graphql:"labels(first: $labelsPage, after: $labelsCursor)"`
-				} `graphql:"... on Issue"`
-			} `graphql:"node(id:$id)"`
-		}
-
-		variables["labelsPage"] = getPerPage(labels.TotalCount, count, labelsPage)
-		variables["labelsCursor"] = githubv4.String(endCursor)
-
-		err := d.client.Query(ctx, &q, variables)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query issue labels for issue #%v: %v", issue.Number, err)
-		}
-
-		labels = q.Node.Issue.Labels
-		for _, node := range labels.Nodes {
-			names = append(names, node.Name)
-		}
-
-		hasNextPage = labels.PageInfo.HasNextPage
-		endCursor = labels.PageInfo.EndCursor
-	}
-
-	return names, nil
-}
-
-func (d Downloader) downloadIssueComments(ctx context.Context, owner string, name string, issue *graphql.Issue) error {
-	comments := issue.Comments
-
-	// save first page of comments
-	for _, comment := range comments.Nodes {
-		err := d.storer.SaveIssueComment(ctx, owner, name, issue.Number, &comment)
-		if err != nil {
-			return err
-		}
-	}
-
-	variables := map[string]interface{}{
-		"id": githubv4.ID(issue.ID),
-	}
-
-	// if there are more issue comments, loop over all the pages
-	hasNextPage := comments.PageInfo.HasNextPage
-	endCursor := comments.PageInfo.EndCursor
-
-	var count int
-	for hasNextPage {
-		count += len(comments.Nodes)
-
-		// get only issue comments
-		var q struct {
-			Node struct {
-				Issue struct {
-					Comments graphql.IssueCommentsConnection `graphql:"comments(first: $issueCommentsPage, after: $issueCommentsCursor)"`
-				} `graphql:"... on Issue"`
-			} `graphql:"node(id:$id)"`
-		}
-
-		variables["issueCommentsPage"] = getPerPage(comments.TotalCount, count, issueCommentsPage)
-		variables["issueCommentsCursor"] = githubv4.String(endCursor)
-
-		err := d.client.Query(ctx, &q, variables)
-		if err != nil {
-			return fmt.Errorf("failed to query issue comments for issue #%v: %v", issue.Number, err)
-		}
-
-		comments = q.Node.Issue.Comments
-		for _, comment := range comments.Nodes {
-			err := d.storer.SaveIssueComment(ctx, owner, name, issue.Number, &comment)
+			labels, err := d.downloadIssueLabels(ctx, &issue)
 			if err != nil {
-				return fmt.Errorf("failed to save issue comments for issue #%v: %v", issue.Number, err)
+				return err
 			}
-		}
 
-		hasNextPage = comments.PageInfo.HasNextPage
-		endCursor = comments.PageInfo.EndCursor
-	}
+			if err := d.storer.SaveIssue(ctx, owner, name, &issue, assignees, labels); err != nil {
+				return err
+			}
 
-	return nil
-}
-
-func (d Downloader) downloadPullRequests(ctx context.Context, owner string, name string, repository *graphql.Repository) error {
-	logger := ctxlog.Get(ctx)
-	logger.Infof("start downloading pull requests")
-	defer logger.Infof("finished downloading pull requests")
-
-	prs := repository.PullRequests
-	process := func(pr *graphql.PullRequest) error {
-		assignees, err := d.downloadPullRequestAssignees(ctx, pr)
-		if err != nil {
-			return err
-		}
-
-		labels, err := d.downloadPullRequestLabels(ctx, pr)
-		if err != nil {
-			return err
-		}
-
-		err = d.storer.SavePullRequest(ctx, owner, name, pr, assignees, labels)
-		if err != nil {
-			return err
-		}
-		err = d.downloadPullRequestComments(ctx, owner, name, pr)
-		if err != nil {
-			return err
-		}
-		err = d.downloadPullRequestReviews(ctx, owner, name, pr)
-		if err != nil {
-			return err
+			if err := d.downloadIssueComments(ctx, owner, name, &issue); err != nil {
+				return err
+			}
 		}
 
 		return nil
 	}
 
-	// Save PRs included in the first page
-	for _, pr := range prs.Nodes {
-		err := process(&pr)
-		if err != nil {
-			return fmt.Errorf("failed to process PR %v/%v #%v: %v", owner, name, pr.Number, err)
-		}
+	return d.downloadConnection(ctx, issuesType, repository.Issues, &q, variables, process)
+}
+
+type issueAssigneesQ struct {
+	Node struct {
+		Issue struct {
+			Assignees graphql.UserConnection `graphql:"assignees(first: $assigneesPage, after: $assigneesCursor)"`
+		} `graphql:"... on Issue"`
+	} `graphql:"node(id:$id)"`
+}
+
+func (q *issueAssigneesQ) Connection() Connection {
+	return q.Node.Issue.Assignees
+}
+
+func (d Downloader) downloadIssueAssignees(ctx context.Context, issue *graphql.Issue) ([]string, error) {
+	var q issueAssigneesQ
+	variables := map[string]interface{}{
+		"id": githubv4.ID(issue.ID),
 	}
 
+	logins := []string{}
+	process := func(res Connection) error {
+		assignees := res.(graphql.UserConnection)
+		for _, node := range assignees.Nodes {
+			logins = append(logins, node.Login)
+		}
+		return nil
+	}
+
+	err := d.downloadConnection(ctx, assigneesType, issue.Assignees, &q, variables, process)
+	if err != nil {
+		return nil, err
+	}
+
+	return logins, err
+}
+
+type issueLabelsQ struct {
+	Node struct {
+		Issue struct {
+			Labels graphql.LabelConnection `graphql:"labels(first: $labelsPage, after: $labelsCursor)"`
+		} `graphql:"... on Issue"`
+	} `graphql:"node(id:$id)"`
+}
+
+func (q *issueLabelsQ) Connection() Connection {
+	return q.Node.Issue.Labels
+}
+
+func (d Downloader) downloadIssueLabels(ctx context.Context, issue *graphql.Issue) ([]string, error) {
+	var q issueLabelsQ
+	variables := map[string]interface{}{
+		"id": githubv4.ID(issue.ID),
+	}
+
+	names := []string{}
+	process := func(res Connection) error {
+		labels := res.(graphql.LabelConnection)
+		for _, node := range labels.Nodes {
+			names = append(names, node.Name)
+		}
+		return nil
+	}
+
+	err := d.downloadConnection(ctx, labelsType, issue.Labels, &q, variables, process)
+	if err != nil {
+		return nil, err
+	}
+
+	return names, err
+}
+
+type issueCommentsQ struct {
+	Node struct {
+		Issue struct {
+			Comments graphql.IssueCommentsConnection `graphql:"comments(first: $issueCommentsPage, after: $issueCommentsCursor)"`
+		} `graphql:"... on Issue"`
+	} `graphql:"node(id:$id)"`
+}
+
+func (q *issueCommentsQ) Connection() Connection {
+	return q.Node.Issue.Comments
+}
+
+func (d Downloader) downloadIssueComments(ctx context.Context, owner string, name string, issue *graphql.Issue) error {
+	var q issueCommentsQ
+	variables := map[string]interface{}{
+		"id": githubv4.ID(issue.ID),
+	}
+
+	process := func(res Connection) error {
+		comments := res.(graphql.IssueCommentsConnection)
+		for _, comment := range comments.Nodes {
+			err := d.storer.SaveIssueComment(ctx, owner, name, issue.Number, &comment)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	return d.downloadConnection(ctx, issueCommentsType, issue.Comments, &q, variables, process)
+}
+
+type pullRequestsQ struct {
+	Node struct {
+		Repository struct {
+			PullRequests graphql.PullRequestConnection `graphql:"pullRequests(first: $pullRequestsPage, after: $pullRequestsCursor)"`
+		} `graphql:"... on Repository"`
+	} `graphql:"node(id:$id)"`
+}
+
+func (q *pullRequestsQ) Connection() Connection {
+	return q.Node.Repository.PullRequests
+}
+
+func (d Downloader) downloadPullRequests(ctx context.Context, owner string, name string, repository *graphql.Repository) error {
+	var q pullRequestsQ
 	variables := map[string]interface{}{
 		"id": githubv4.ID(repository.ID),
 
-		"assigneesPage":                 githubv4.Int(assigneesPage),
-		"issueCommentsPage":             githubv4.Int(issueCommentsPage),
-		"labelsPage":                    githubv4.Int(labelsPage),
-		"pullRequestReviewCommentsPage": githubv4.Int(pullRequestReviewCommentsPage),
-		"pullRequestReviewsPage":        githubv4.Int(pullRequestReviewsPage),
+		"assigneesPage":                 assigneesType.PageSize,
+		"issueCommentsPage":             issueCommentsType.PageSize,
+		"labelsPage":                    labelsType.PageSize,
+		"pullRequestReviewCommentsPage": pullRequestReviewCommentsType.PageSize,
+		"pullRequestReviewsPage":        pullRequestReviewsType.PageSize,
 
 		"assigneesCursor":                 (*githubv4.String)(nil),
 		"issueCommentsCursor":             (*githubv4.String)(nil),
@@ -603,190 +528,127 @@ func (d Downloader) downloadPullRequests(ctx context.Context, owner string, name
 		"pullRequestReviewsCursor":        (*githubv4.String)(nil),
 	}
 
-	// if there are more PRs, loop over all the pages
-	hasNextPage := prs.PageInfo.HasNextPage
-	endCursor := prs.PageInfo.EndCursor
-
-	var count int
-	for hasNextPage {
-		count += len(prs.Nodes)
-		if count%(pullRequestsPage*logEachPageN) == 0 {
-			logger.Infof("%d/%d pull requests downloaded", count, prs.TotalCount)
-		}
-
-		// get only PRs
-		var q struct {
-			Node struct {
-				Repository struct {
-					PullRequests graphql.PullRequestConnection `graphql:"pullRequests(first: $pullRequestsPage, after: $pullRequestsCursor)"`
-				} `graphql:"... on Repository"`
-			} `graphql:"node(id:$id)"`
-		}
-
-		variables["pullRequestsPage"] = getPerPageLimited(prs.TotalCount, count, pullRequestsPage, pullRequestsPage)
-		variables["pullRequestsCursor"] = githubv4.String(endCursor)
-
-		err := d.client.Query(ctx, &q, variables)
-		if err != nil {
-			return fmt.Errorf("failed to query PRs for repository %v/%v: %v", owner, name, err)
-		}
-
-		prs = q.Node.Repository.PullRequests
+	process := func(res Connection) error {
+		prs := res.(graphql.PullRequestConnection)
 		for _, pr := range prs.Nodes {
-			err := process(&pr)
+			assignees, err := d.downloadPullRequestAssignees(ctx, &pr)
 			if err != nil {
-				return fmt.Errorf("failed to process PR %v/%v #%v: %v", owner, name, pr.Number, err)
+				return err
+			}
+
+			labels, err := d.downloadPullRequestLabels(ctx, &pr)
+			if err != nil {
+				return err
+			}
+
+			if err := d.storer.SavePullRequest(ctx, owner, name, &pr, assignees, labels); err != nil {
+				return err
+			}
+
+			if err := d.downloadPullRequestComments(ctx, owner, name, &pr); err != nil {
+				return err
+			}
+			if err := d.downloadPullRequestReviews(ctx, owner, name, &pr); err != nil {
+				return err
 			}
 		}
 
-		hasNextPage = prs.PageInfo.HasNextPage
-		endCursor = prs.PageInfo.EndCursor
+		return nil
 	}
 
-	return nil
+	return d.downloadConnection(ctx, pullRequestsType, repository.PullRequests, &q, variables, process)
+}
+
+type pullRequestAssigneesQ struct {
+	Node struct {
+		PullRequest struct {
+			Assignees graphql.UserConnection `graphql:"assignees(first: $assigneesPage, after: $assigneesCursor)"`
+		} `graphql:"... on PullRequest"`
+	} `graphql:"node(id:$id)"`
+}
+
+func (q *pullRequestAssigneesQ) Connection() Connection {
+	return q.Node.PullRequest.Assignees
 }
 
 func (d Downloader) downloadPullRequestAssignees(ctx context.Context, pr *graphql.PullRequest) ([]string, error) {
-	assignees := pr.Assignees
-	logins := []string{}
-
-	// Assignees included in the first page
-	for _, node := range assignees.Nodes {
-		logins = append(logins, node.Login)
-	}
-
+	var q pullRequestAssigneesQ
 	variables := map[string]interface{}{
 		"id": githubv4.ID(pr.ID),
 	}
 
-	// if there are more assigness, loop over all the pages
-	hasNextPage := assignees.PageInfo.HasNextPage
-	endCursor := assignees.PageInfo.EndCursor
-
-	var count int
-	for hasNextPage {
-		count += len(assignees.Nodes)
-
-		// get only PR assignees
-		var q struct {
-			Node struct {
-				PullRequest struct {
-					Assignees graphql.UserConnection `graphql:"assignees(first: $assigneesPage, after: $assigneesCursor)"`
-				} `graphql:"... on PullRequest"`
-			} `graphql:"node(id:$id)"`
-		}
-
-		variables["assigneesPage"] = getPerPage(assignees.TotalCount, count, assigneesPage)
-		variables["assigneesCursor"] = githubv4.String(endCursor)
-
-		err := d.client.Query(ctx, &q, variables)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query PR assignees for PR #%v: %v", pr.Number, err)
-		}
-
-		assignees = q.Node.PullRequest.Assignees
+	logins := []string{}
+	process := func(res Connection) error {
+		assignees := res.(graphql.UserConnection)
 		for _, node := range assignees.Nodes {
 			logins = append(logins, node.Login)
 		}
+		return nil
+	}
 
-		hasNextPage = assignees.PageInfo.HasNextPage
-		endCursor = assignees.PageInfo.EndCursor
+	err := d.downloadConnection(ctx, assigneesType, pr.Assignees, &q, variables, process)
+	if err != nil {
+		return nil, err
 	}
 
 	return logins, nil
 }
 
+type pullRequestLabelsQ struct {
+	Node struct {
+		PullRequest struct {
+			Labels graphql.LabelConnection `graphql:"labels(first: $labelsPage, after: $labelsCursor)"`
+		} `graphql:"... on PullRequest"`
+	} `graphql:"node(id:$id)"`
+}
+
+func (q *pullRequestLabelsQ) Connection() Connection {
+	return q.Node.PullRequest.Labels
+}
+
 func (d Downloader) downloadPullRequestLabels(ctx context.Context, pr *graphql.PullRequest) ([]string, error) {
-	labels := pr.Labels
-	names := []string{}
-
-	// Labels included in the first page
-	for _, node := range labels.Nodes {
-		names = append(names, node.Name)
-	}
-
+	var q pullRequestLabelsQ
 	variables := map[string]interface{}{
 		"id": githubv4.ID(pr.ID),
 	}
 
-	// if there are more labels, loop over all the pages
-	hasNextPage := labels.PageInfo.HasNextPage
-	endCursor := labels.PageInfo.EndCursor
-
-	var count int
-	for hasNextPage {
-		count += len(labels.Nodes)
-
-		// get only PR labels
-		var q struct {
-			Node struct {
-				PullRequest struct {
-					Labels graphql.LabelConnection `graphql:"labels(first: $labelsPage, after: $labelsCursor)"`
-				} `graphql:"... on PullRequest"`
-			} `graphql:"node(id:$id)"`
-		}
-
-		variables["labelsPage"] = getPerPage(labels.TotalCount, count, labelsPage)
-		variables["labelsCursor"] = githubv4.String(endCursor)
-
-		err := d.client.Query(ctx, &q, variables)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query PR labels for PR #%v: %v", pr.Number, err)
-		}
-
-		labels = q.Node.PullRequest.Labels
+	names := []string{}
+	process := func(res Connection) error {
+		labels := res.(graphql.LabelConnection)
 		for _, node := range labels.Nodes {
 			names = append(names, node.Name)
 		}
-
-		hasNextPage = labels.PageInfo.HasNextPage
-		endCursor = labels.PageInfo.EndCursor
+		return nil
 	}
 
-	return names, nil
+	err := d.downloadConnection(ctx, labelsType, pr.Labels, &q, variables, process)
+	if err != nil {
+		return nil, err
+	}
+
+	return names, err
+}
+
+type pullRequestCommentsQ struct {
+	Node struct {
+		PullRequest struct {
+			Comments graphql.IssueCommentsConnection `graphql:"comments(first: $issueCommentsPage, after: $issueCommentsCursor)"`
+		} `graphql:"... on PullRequest"`
+	} `graphql:"node(id:$id)"`
+}
+
+func (q *pullRequestCommentsQ) Connection() Connection {
+	return q.Node.PullRequest.Comments
 }
 
 func (d Downloader) downloadPullRequestComments(ctx context.Context, owner string, name string, pr *graphql.PullRequest) error {
-	comments := pr.Comments
-
-	// save first page of comments
-	for _, comment := range comments.Nodes {
-		err := d.storer.SavePullRequestComment(ctx, owner, name, pr.Number, &comment)
-		if err != nil {
-			return fmt.Errorf("failed to save PR comments for PR #%v: %v", pr.Number, err)
-		}
-	}
-
+	var q pullRequestCommentsQ
 	variables := map[string]interface{}{
 		"id": githubv4.ID(pr.ID),
 	}
 
-	// if there are more issue comments, loop over all the pages
-	hasNextPage := comments.PageInfo.HasNextPage
-	endCursor := comments.PageInfo.EndCursor
-
-	var count int
-	for hasNextPage {
-		count += len(comments.Nodes)
-
-		// get only PR comments
-		var q struct {
-			Node struct {
-				PullRequest struct {
-					Comments graphql.IssueCommentsConnection `graphql:"comments(first: $issueCommentsPage, after: $issueCommentsCursor)"`
-				} `graphql:"... on PullRequest"`
-			} `graphql:"node(id:$id)"`
-		}
-
-		variables["issueCommentsPage"] = getPerPage(comments.TotalCount, count, issueCommentsPage)
-		variables["issueCommentsCursor"] = githubv4.String(endCursor)
-
-		err := d.client.Query(ctx, &q, variables)
-		if err != nil {
-			return fmt.Errorf("failed to query PR comments for PR #%v: %v", pr.Number, err)
-		}
-
-		comments = q.Node.PullRequest.Comments
+	process := func(res Connection) error {
+		comments := res.(graphql.IssueCommentsConnection)
 		for _, comment := range comments.Nodes {
 			err := d.storer.SavePullRequestComment(ctx, owner, name, pr.Number, &comment)
 			if err != nil {
@@ -794,144 +656,84 @@ func (d Downloader) downloadPullRequestComments(ctx context.Context, owner strin
 			}
 		}
 
-		hasNextPage = comments.PageInfo.HasNextPage
-		endCursor = comments.PageInfo.EndCursor
+		return nil
 	}
 
-	return nil
+	return d.downloadConnection(ctx, issueCommentsType, pr.Comments, &q, variables, process)
+}
+
+type pullRequestReviewsQ struct {
+	Node struct {
+		PullRequest struct {
+			Reviews graphql.PullRequestReviewConnection `graphql:"reviews(first: $pullRequestReviewsPage, after: $pullRequestReviewsCursor)"`
+		} `graphql:"... on PullRequest"`
+	} `graphql:"node(id:$id)"`
+}
+
+func (q *pullRequestReviewsQ) Connection() Connection {
+	return q.Node.PullRequest.Reviews
 }
 
 func (d Downloader) downloadPullRequestReviews(ctx context.Context, owner string, name string, pr *graphql.PullRequest) error {
-	reviews := pr.Reviews
-
-	process := func(review *graphql.PullRequestReview) error {
-		err := d.storer.SavePullRequestReview(ctx, owner, name, pr.Number, review)
-		if err != nil {
-			return fmt.Errorf("failed to save PR review for PR #%v: %v", pr.Number, err)
-		}
-		return d.downloadReviewComments(ctx, owner, name, pr.Number, review)
-	}
-
-	// save first page of reviews
-	for _, review := range reviews.Nodes {
-		err := process(&review)
-		if err != nil {
-			return err
-		}
-	}
-
+	var q pullRequestReviewsQ
 	variables := map[string]interface{}{
 		"id": githubv4.ID(pr.ID),
 
-		"pullRequestReviewCommentsPage":   githubv4.Int(pullRequestReviewCommentsPage),
+		"pullRequestReviewCommentsPage":   pullRequestReviewCommentsType.PageSize,
 		"pullRequestReviewCommentsCursor": (*githubv4.String)(nil),
 	}
 
-	// if there are more reviews, loop over all the pages
-	hasNextPage := reviews.PageInfo.HasNextPage
-	endCursor := reviews.PageInfo.EndCursor
-
-	var count int
-	for hasNextPage {
-		count += len(reviews.Nodes)
-
-		// get only PR reviews
-		var q struct {
-			Node struct {
-				PullRequest struct {
-					Reviews graphql.PullRequestReviewConnection `graphql:"reviews(first: $pullRequestReviewsPage, after: $pullRequestReviewsCursor)"`
-				} `graphql:"... on PullRequest"`
-			} `graphql:"node(id:$id)"`
-		}
-
-		variables["pullRequestReviewsPage"] = getPerPage(reviews.TotalCount, count, pullRequestReviewsPage)
-		variables["pullRequestReviewsCursor"] = githubv4.String(endCursor)
-
-		err := d.client.Query(ctx, &q, variables)
-		if err != nil {
-			return fmt.Errorf("failed to query PR reviews for PR #%v: %v", pr.Number, err)
-		}
-
-		reviews = q.Node.PullRequest.Reviews
-		for _, review := range q.Node.PullRequest.Reviews.Nodes {
-			err := process(&review)
+	process := func(res Connection) error {
+		reviews := res.(graphql.PullRequestReviewConnection)
+		for _, review := range reviews.Nodes {
+			err := d.storer.SavePullRequestReview(ctx, owner, name, pr.Number, &review)
 			if err != nil {
+				return fmt.Errorf("failed to save PR review for PR #%v: %v", pr.Number, err)
+			}
+			if err := d.downloadReviewComments(ctx, owner, name, pr.Number, &review); err != nil {
 				return err
 			}
-		}
-
-		hasNextPage = reviews.PageInfo.HasNextPage
-		endCursor = reviews.PageInfo.EndCursor
-	}
-
-	return nil
-}
-
-func (d Downloader) downloadReviewComments(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
-	comments := review.Comments
-
-	process := func(comment *graphql.PullRequestReviewComment) error {
-		err := d.storer.SavePullRequestReviewComment(ctx, repositoryOwner, repositoryName, pullRequestNumber, review.DatabaseID, comment)
-		if err != nil {
-			return fmt.Errorf(
-				"failed to save PullRequestReviewComment for PR #%v, review ID %v: %v",
-				pullRequestNumber, review.ID, err)
 		}
 
 		return nil
 	}
 
-	// save first page of comments
-	for _, comment := range comments.Nodes {
-		err := process(&comment)
-		if err != nil {
-			return err
-		}
-	}
+	return d.downloadConnection(ctx, pullRequestReviewsType, pr.Reviews, &q, variables, process)
+}
 
+type reviewCommentsQ struct {
+	Node struct {
+		PullRequestReview struct {
+			Comments graphql.PullRequestReviewCommentConnection `graphql:"comments(first: $pullRequestReviewCommentsPage, after: $pullRequestReviewCommentsCursor)"`
+		} `graphql:"... on PullRequestReview"`
+	} `graphql:"node(id:$id)"`
+}
+
+func (q *reviewCommentsQ) Connection() Connection {
+	return q.Node.PullRequestReview.Comments
+}
+
+func (d Downloader) downloadReviewComments(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
+	var q reviewCommentsQ
 	variables := map[string]interface{}{
 		"id": githubv4.ID(review.ID),
 	}
 
-	// if there are more review comments, loop over all the pages
-	hasNextPage := review.Comments.PageInfo.HasNextPage
-	endCursor := review.Comments.PageInfo.EndCursor
-
-	var count int
-	for hasNextPage {
-		count += len(comments.Nodes)
-
-		var q struct {
-			Node struct {
-				PullRequestReview struct {
-					Comments graphql.PullRequestReviewCommentConnection `graphql:"comments(first: $pullRequestReviewCommentsPage, after: $pullRequestReviewCommentsCursor)"`
-				} `graphql:"... on PullRequestReview"`
-			} `graphql:"node(id:$id)"`
-		}
-
-		variables["pullRequestReviewCommentsPage"] = getPerPage(comments.TotalCount, count, pullRequestReviewCommentsPage)
-		variables["pullRequestReviewCommentsCursor"] = githubv4.String(endCursor)
-
-		err := d.client.Query(ctx, &q, variables)
-		if err != nil {
-			return fmt.Errorf(
-				"failed to query PR review comments for PR #%v, review ID %v: %v",
-				pullRequestNumber, review.ID, err)
-		}
-
-		comments = q.Node.PullRequestReview.Comments
+	process := func(res Connection) error {
+		comments := res.(graphql.PullRequestReviewCommentConnection)
 		for _, comment := range comments.Nodes {
-			err := process(&comment)
+			err := d.storer.SavePullRequestReviewComment(ctx, repositoryOwner, repositoryName, pullRequestNumber, review.DatabaseID, &comment)
 			if err != nil {
-				return err
+				return fmt.Errorf(
+					"failed to save PullRequestReviewComment for PR #%v, review ID %v: %v",
+					pullRequestNumber, review.ID, err)
 			}
 		}
 
-		hasNextPage = comments.PageInfo.HasNextPage
-		endCursor = comments.PageInfo.EndCursor
+		return nil
 	}
 
-	return nil
+	return d.downloadConnection(ctx, pullRequestReviewCommentsType, review.Comments, &q, variables, process)
 }
 
 // DownloadOrganization downloads the metadata for the given organization and
@@ -965,7 +767,7 @@ func (d Downloader) DownloadOrganization(ctx context.Context, name string, versi
 	variables := map[string]interface{}{
 		"organizationLogin": githubv4.String(name),
 
-		"membersWithRolePage":   githubv4.Int(membersWithRolePage),
+		"membersWithRolePage":   membersWithRole.PageSize,
 		"membersWithRoleCursor": (*githubv4.String)(nil),
 	}
 
@@ -979,7 +781,6 @@ func (d Downloader) DownloadOrganization(ctx context.Context, name string, versi
 		return fmt.Errorf("failed to save organization %v: %v", name, err)
 	}
 
-	// issues and comments
 	err = d.downloadUsers(ctx, name, &q.Organization)
 	if err != nil {
 		return err
@@ -988,67 +789,35 @@ func (d Downloader) DownloadOrganization(ctx context.Context, name string, versi
 	return nil
 }
 
-func (d Downloader) downloadUsers(ctx context.Context, name string, organization *graphql.Organization) error {
-	var logger log.Logger
-	ctx, logger = ctxlog.WithLogFields(ctx, log.Fields{"owner": name})
-	logger.Infof("start downloading users")
-	defer logger.Infof("finished downloading users")
+type usersQ struct {
+	Organization struct {
+		MembersWithRole graphql.OrganizationMemberConnection `graphql:"membersWithRole(first: $membersWithRolePage, after: $membersWithRoleCursor)"`
+	} `graphql:"organization(login: $organizationLogin)"`
+}
 
-	process := func(user *graphql.UserExtended) error {
-		err := d.storer.SaveUser(ctx, organization.DatabaseID, organization.Login, user)
-		if err != nil {
-			return fmt.Errorf("failed to save UserExtended: %v", err)
+func (q *usersQ) Connection() Connection {
+	return q.Organization.MembersWithRole
+}
+
+func (d Downloader) downloadUsers(ctx context.Context, name string, organization *graphql.Organization) error {
+	var q usersQ
+	variables := map[string]interface{}{
+		"organizationLogin": githubv4.String(name),
+	}
+
+	process := func(res Connection) error {
+		users := res.(graphql.OrganizationMemberConnection)
+		for _, user := range users.Nodes {
+			err := d.storer.SaveUser(ctx, organization.DatabaseID, organization.Login, &user)
+			if err != nil {
+				return fmt.Errorf("failed to save UserExtended: %v", err)
+			}
 		}
 
 		return nil
 	}
 
-	// Save users included in the first page
-	for _, user := range organization.MembersWithRole.Nodes {
-		err := process(&user)
-		if err != nil {
-			return fmt.Errorf("failed to process user %v: %v", user.Login, err)
-		}
-	}
-
-	variables := map[string]interface{}{
-		"organizationLogin": githubv4.String(name),
-
-		"membersWithRolePage":   githubv4.Int(membersWithRolePage),
-		"membersWithRoleCursor": (*githubv4.String)(nil),
-	}
-
-	// if there are more users, loop over all the pages
-	hasNextPage := organization.MembersWithRole.PageInfo.HasNextPage
-	endCursor := organization.MembersWithRole.PageInfo.EndCursor
-
-	for hasNextPage {
-		// get only users
-		var q struct {
-			Organization struct {
-				MembersWithRole graphql.OrganizationMemberConnection `graphql:"membersWithRole(first: $membersWithRolePage, after: $membersWithRoleCursor)"`
-			} `graphql:"organization(login: $organizationLogin)"`
-		}
-
-		variables["membersWithRoleCursor"] = githubv4.String(endCursor)
-
-		err := d.client.Query(ctx, &q, variables)
-		if err != nil {
-			return fmt.Errorf("failed to organization members for organization %v: %v", name, err)
-		}
-
-		for _, user := range q.Organization.MembersWithRole.Nodes {
-			err := process(&user)
-			if err != nil {
-				return fmt.Errorf("failed to process user %v: %v", user.Login, err)
-			}
-		}
-
-		hasNextPage = q.Organization.MembersWithRole.PageInfo.HasNextPage
-		endCursor = q.Organization.MembersWithRole.PageInfo.EndCursor
-	}
-
-	return nil
+	return d.downloadConnection(ctx, membersWithRole, organization.MembersWithRole, &q, variables, process)
 }
 
 // SetCurrent enables the given version as the current one accessible in the DB
