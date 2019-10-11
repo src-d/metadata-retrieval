@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/gob"
 	"flag"
@@ -71,7 +72,7 @@ func main() {
 
 	// store the results
 	dt := time.Now()
-	filename := fmt.Sprintf("repository_%s_%s_%s.gob", org, repo, dt.Format("2006-01-02"))
+	filename := fmt.Sprintf("repository_%s_%s_%s.gob.gz", org, repo, dt.Format("2006-01-02"))
 	err = encodeAndStore(filename, reqResp)
 	if err != nil {
 		panic(err)
@@ -86,7 +87,7 @@ func main() {
 	log.Infof("End recording an org")
 
 	// store the results
-	filename = fmt.Sprintf("organization_%s_%s.gob", org, dt.Format("2006-01-02"))
+	filename = fmt.Sprintf("organization_%s_%s.gob.gz", org, dt.Format("2006-01-02"))
 	err = encodeAndStore(filename, reqResp)
 	if err != nil {
 		panic(err)
@@ -122,6 +123,7 @@ func encodeAndStore(filename string, reqResp map[string]string) error {
 	if err != nil {
 		return err
 	}
-	defer encodeFile.Close()
-	return gob.NewEncoder(encodeFile).Encode(reqResp)
+	zw := gzip.NewWriter(encodeFile)
+	defer zw.Close()
+	return gob.NewEncoder(zw).Encode(reqResp)
 }

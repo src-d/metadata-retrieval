@@ -6,6 +6,7 @@ package github
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"database/sql"
 	"encoding/gob"
@@ -32,8 +33,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const orgRecFile = "../testdata/organization_src-d_2019-10-10.gob"
-const repoRecFile = "../testdata/repository_src-d_gitbase_2019-10-10.gob"
+const orgRecFile = "../testdata/organization_src-d_2019-10-11.gob.gz"
+const repoRecFile = "../testdata/repository_src-d_gitbase_2019-10-11.gob.gz"
 
 // loads requests-response data from a gob file
 func loadReqResp(filepath string, reqResp map[string]string) error {
@@ -43,8 +44,12 @@ func loadReqResp(filepath string, reqResp map[string]string) error {
 		return err
 	}
 	defer decodeFile.Close()
+	reader, err := gzip.NewReader(decodeFile)
+	if err != nil {
+		return err
+	}
 	// Create a decoder and decode
-	return gob.NewDecoder(decodeFile).Decode(&reqResp)
+	return gob.NewDecoder(reader).Decode(&reqResp)
 }
 
 // loads tests from a json file
