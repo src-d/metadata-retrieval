@@ -157,12 +157,12 @@ func (suite *DownloaderTestSuite) TestOnlineRepositoryDownload() {
 	for _, test := range tests.RepositoryTests {
 		test := test // pinned, see scopelint for more info
 		t.Run(fmt.Sprintf("Repo: %s/%s", test.Owner, test.Repository), func(t *testing.T) {
-			testRepo(t, test, downloader, storer)
+			testRepo(t, test, downloader, storer, false)
 		})
 	}
 }
 
-func testRepo(t *testing.T, oracle testutils.RepositoryTest, d *Downloader, storer *testutils.Memory) {
+func testRepo(t *testing.T, oracle testutils.RepositoryTest, d *Downloader, storer *testutils.Memory, strict bool) {
 	err := d.DownloadRepository(context.TODO(), oracle.Owner, oracle.Repository, oracle.Version)
 	require := require.New(t) // Make a new require object for the specified test, so no need to pass it around
 	require.Nil(err)
@@ -172,13 +172,22 @@ func testRepo(t *testing.T, oracle testutils.RepositoryTest, d *Downloader, stor
 	require.Equal(oracle.IsArchived, storer.Repository.IsArchived)
 	require.Equal(oracle.HasWiki, storer.Repository.HasWikiEnabled)
 	require.ElementsMatch(oracle.Topics, storer.Topics)
-	require.Len(storer.PRs, oracle.NumOfPRs)
-	require.Len(storer.PRComments, oracle.NumOfPRComments)
-	require.Len(storer.Issues, oracle.NumOfIssues)
-	require.Len(storer.IssueComments, oracle.NumOfIssueComments)
 	numOfPRReviews, numOfPRReviewComments := storer.CountPRReviewsAndReviewComments()
-	require.Equal(oracle.NumOfPRReviews, numOfPRReviews)
-	require.Equal(oracle.NumOfPRReviewComments, numOfPRReviewComments)
+	if strict {
+		require.Len(storer.PRs, oracle.NumOfPRs)
+		require.Len(storer.PRComments, oracle.NumOfPRComments)
+		require.Len(storer.Issues, oracle.NumOfIssues)
+		require.Len(storer.IssueComments, oracle.NumOfIssueComments)
+		require.Equal(oracle.NumOfPRReviews, numOfPRReviews)
+		require.Equal(oracle.NumOfPRReviewComments, numOfPRReviewComments)
+	} else {
+		require.GreaterOrEqual(oracle.NumOfPRs, len(storer.PRs))
+		require.GreaterOrEqual(oracle.NumOfPRComments, len(storer.PRComments))
+		require.GreaterOrEqual(oracle.NumOfIssues, len(storer.Issues))
+		require.GreaterOrEqual(oracle.NumOfIssueComments, len(storer.IssueComments))
+		require.GreaterOrEqual(oracle.NumOfPRReviews, numOfPRReviews)
+		require.GreaterOrEqual(oracle.NumOfPRReviewComments, numOfPRReviewComments)
+	}
 }
 
 // TestOnlineOrganizationDownload Tests the download of known and fixed GitHub organization
@@ -263,7 +272,7 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownload() {
 	for _, test := range tests.RepositoryTests {
 		test := test
 		t.Run(fmt.Sprintf("Repo: %s/%s", test.Owner, test.Repository), func(t *testing.T) {
-			testRepo(t, test, downloader, storer)
+			testRepo(t, test, downloader, storer, true)
 		})
 	}
 }
@@ -315,47 +324,64 @@ func (suite *DownloaderTestSuite) TestOnlineOrganizationDownloadWithDB() {
 	}
 }
 
-func testRepoWithDB(t *testing.T, oracle testutils.RepositoryTest, d *Downloader, db *sql.DB) {
+func testRepoWithDB(t *testing.T, oracle testutils.RepositoryTest, d *Downloader, db *sql.DB, strict bool) {
 	err := d.DownloadRepository(context.TODO(), oracle.Owner, oracle.Repository, oracle.Version)
 	require := require.New(t) // Make a new require object for the specified test, so no need to pass it around
 	require.Nil(err)
-	checkRepo(require, db, oracle)
-	checkIssues(require, db, oracle)
-	checkIssuePRComments(require, db, oracle)
-	checkPRs(require, db, oracle)
-	checkPRReviewComments(require, db, oracle)
+	checkRepo(require, db, oracle, strict)
+	checkIssues(require, db, oracle, strict)
+	checkIssuePRComments(require, db, oracle, strict)
+	checkPRs(require, db, oracle, strict)
+	checkPRReviewComments(require, db, oracle, strict)
 }
 
-func checkIssues(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest) {
+func checkIssues(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest, strict bool) {
 	var numOfIssues int
 	err := db.QueryRow("select count(*) from issues where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfIssues)
 	require.NoError(err, "Error in retrieving issues")
-	require.Equal(numOfIssues, oracle.NumOfIssues, "Issues")
+	if strict {
+		require.Equal(oracle.NumOfIssues, numOfIssues, "Issues")
+	} else {
+		require.GreaterOrEqual(oracle.NumOfIssues, numOfIssues, "Issues")
+	}
+
 }
 
-func checkIssuePRComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest) {
+func checkIssuePRComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest, strict bool) {
 	var numOfComments int
 	err := db.QueryRow("select count(*) from issue_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfComments)
 	require.NoError(err, "Error in retrieving issue comments")
 	// NB: ghsync saves both Issue and PRs comments in the same table, issue_comments => See store/db.go comment
-	require.Equal(oracle.NumOfPRComments+oracle.NumOfIssueComments, numOfComments, "Issue and PR Comments")
+	if strict {
+		require.Equal(oracle.NumOfPRComments+oracle.NumOfIssueComments, numOfComments, "Issue and PR Comments")
+	} else {
+		require.GreaterOrEqual(oracle.NumOfPRComments+oracle.NumOfIssueComments, numOfComments, "Issue and PR Comments")
+	}
 }
 
-func checkPRs(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest) {
+func checkPRs(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest, strict bool) {
 	var numOfPRs int
 	err := db.QueryRow("select count(*) from pull_requests where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRs)
 	require.NoError(err, "Error in retrieving pull requests")
-	require.Equal(oracle.NumOfPRs, numOfPRs, "PRs")
+	if strict {
+		require.Equal(oracle.NumOfPRs, numOfPRs, "PRs")
+	} else {
+		require.GreaterOrEqual(oracle.NumOfPRs, numOfPRs, "PRs")
+	}
 }
 
-func checkPRReviewComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest) {
+func checkPRReviewComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest, strict bool) {
 	var numOfPRReviewComments int
 	err := db.QueryRow("select count(*) from pull_request_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRReviewComments)
 	require.NoError(err, "Error in retrieving pull request comments")
-	require.Equal(oracle.NumOfPRReviewComments, numOfPRReviewComments, "PR Review Comments")
+	if strict {
+		require.Equal(oracle.NumOfPRReviewComments, numOfPRReviewComments, "PR Review Comments")
+	} else {
+		require.GreaterOrEqual(oracle.NumOfPRReviewComments, numOfPRReviewComments, "PR Review Comments")
+	}
 }
 
-func checkRepo(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest) {
+func checkRepo(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest, strict bool) {
 	var (
 		htmlurl   string
 		createdAt time.Time
@@ -391,7 +417,7 @@ func (suite *DownloaderTestSuite) TestOnlineRepositoryDownloadWithDB() {
 	for _, test := range tests.RepositoryTests {
 		test := test
 		t.Run(fmt.Sprintf("Repo %s/%s with DB", test.Owner, test.Repository), func(t *testing.T) {
-			testRepoWithDB(t, test, downloader, suite.db)
+			testRepoWithDB(t, test, downloader, suite.db, false)
 		})
 	}
 }
@@ -433,7 +459,7 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithDB() {
 	for _, test := range tests.RepositoryTests {
 		test := test
 		t.Run(fmt.Sprintf("%s/%s", test.Owner, test.Repository), func(t *testing.T) {
-			testRepoWithDB(t, test, downloader, suite.db)
+			testRepoWithDB(t, test, downloader, suite.db, true)
 		})
 	}
 }
