@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -78,20 +79,20 @@ type Ghsync struct {
 	cli.Command `name:"ghsync" short-description:"Mimics ghsync deep command" long-description:"Mimics ghsync deep command"`
 	DownloaderCmd
 
-	Name    string `long:"name" description:"GitHub organization name" required:"true"`
-	NoForks bool   `long:"no-forks"  env:"GHSYNC_NO_FORKS" description:"github forked repositories will be skipped"`
+	Orgs    []string `long:"orgs" env:"GHSYNC_ORGS" env-delim:"," description:"GitHub organizations names comma separated" required:"true"`
+	NoForks bool     `long:"no-forks"  env:"GHSYNC_NO_FORKS" description:"github forked repositories will be skipped"`
 }
 
 func (c *Ghsync) Execute(args []string) error {
 	return c.ExecuteBody(
-		log.New(log.Fields{"org": c.Name}),
+		log.DefaultLogger,
 		func(logger log.Logger, dp *DownloadersPool) error {
-			err := c.downloadOrg(logger, dp)
+			repos, err := c.listAllRepos(logger, dp, c.Orgs)
 			if err != nil {
 				return err
 			}
 
-			repos, err := c.listRepos(logger, dp)
+			err = c.downloadOrgs(logger, dp, c.Orgs)
 			if err != nil {
 				return err
 			}
@@ -100,38 +101,82 @@ func (c *Ghsync) Execute(args []string) error {
 		})
 }
 
-func (c *Ghsync) downloadOrg(logger log.Logger, dp *DownloadersPool) error {
-	err := dp.WithDownloader(func(d *github.Downloader) error {
-		logger.Infof("downloading organization")
-		return d.DownloadOrganization(context.TODO(), c.Name, c.Version)
-	})
+func (c *Ghsync) listAllRepos(logger log.Logger, dp *DownloadersPool, orgs []string) ([]string, error) {
+	var repos []string
+	logger.Infof("listing all repositories")
+	for _, org := range orgs {
+		orgRepos, err := c.listRepos(logger.With(log.Fields{"organization": org}), dp, org)
+		if err != nil {
+			return nil, err
+		}
 
-	if err != nil {
-		return fmt.Errorf("failed to download organization %v: %v", c.Name, err)
+		for _, r := range orgRepos {
+			repos = append(repos, fmt.Sprintf("%s/%s", org, r))
+		}
 	}
 
-	logger.Infof("finished downloading organization")
-	return nil
+	logger.Infof("found %d repositories in total", len(repos))
+	return repos, nil
 }
 
-func (c *Ghsync) listRepos(logger log.Logger, dp *DownloadersPool) ([]string, error) {
+func (c *Ghsync) listRepos(logger log.Logger, dp *DownloadersPool, org string) ([]string, error) {
 	var repos []string
 	err := dp.WithDownloader(func(d *github.Downloader) error {
 		var err error
 		logger.Infof("listing repositories")
-		repos, err = d.ListRepositories(context.TODO(), c.Name, c.NoForks)
+		repos, err = d.ListRepositories(context.TODO(), org, c.NoForks)
 		return err
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to list repositories for organization %v: %v", c.Name, err)
+		return nil, fmt.Errorf("failed to list repositories for organization %v: %v", org, err)
 	}
 
 	logger.Infof("found %d repositories", len(repos))
 	return repos, nil
 }
 
+func (c *Ghsync) downloadOrgs(logger log.Logger, dp *DownloadersPool, orgs []string) error {
+	resourceType := "org"
+
+	downloadFn := func(ctx context.Context, d *github.Downloader, org string) error {
+		return d.DownloadOrganization(ctx, org, c.Version)
+	}
+
+	prepareLoggerFn := func(logger log.Logger, repo string) log.Logger {
+		return logger
+	}
+
+	return c.downloadParallel(logger, dp, resourceType, orgs, downloadFn, prepareLoggerFn)
+}
+
 func (c *Ghsync) downloadRepos(logger log.Logger, dp *DownloadersPool, repos []string) error {
+	resourceType := "repo"
+
+	downloadFn := func(ctx context.Context, d *github.Downloader, repo string) error {
+		splitted := strings.Split(repo, "/")
+		return d.DownloadRepository(ctx, splitted[0], splitted[1], c.Version)
+	}
+
+	prepareLoggerFn := func(logger log.Logger, repo string) log.Logger {
+		splitted := strings.Split(repo, "/")
+		return logger.With(log.Fields{"owner": splitted[0], "repo": splitted[1]})
+	}
+
+	return c.downloadParallel(logger, dp, resourceType, repos, downloadFn, prepareLoggerFn)
+}
+
+func (c *Ghsync) downloadParallel(
+	logger log.Logger,
+	dp *DownloadersPool,
+	resourceType string,
+	params []string,
+	downloadFn func(ctx context.Context, d *github.Downloader, param string) error,
+	prepareLoggerFn func(logger log.Logger, param string) log.Logger,
+) error {
+	logger = logger.With(log.Fields{"resource-type": resourceType})
+	logger.Infof("started downloading all %ss", resourceType)
+
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -139,31 +184,34 @@ func (c *Ghsync) downloadRepos(logger log.Logger, dp *DownloadersPool, repos []s
 	errCh := make(chan error, dp.Size)
 
 	var done uint64
-	for _, repo := range repos {
+	for _, p := range params {
 		wg.Add(1)
-		go func(logger log.Logger, r string) {
+
+		logger = prepareLoggerFn(logger.With(log.Fields{resourceType: p}), p)
+
+		go func(logger log.Logger, p string) {
 			defer wg.Done()
 
 			err := dp.WithDownloader(func(d *github.Downloader) error {
-				logger.Infof("start downloading '%s'", r)
-				return d.DownloadRepository(ctx, c.Name, r, c.Version)
+				logger.Infof("start downloading '%s'", p)
+				return downloadFn(ctx, d, p)
 			})
 
 			if ctx.Err() != nil {
-				logger.Warningf("stopped due to an error occurred while downloading another repository")
+				logger.Warningf("stopped due to an error occurred while downloading another %s", resourceType)
 				return
 			}
 
 			if err != nil {
-				logger.Errorf(err, "error while downloading repository")
-				errCh <- fmt.Errorf("error while downloading repository: %v", err)
+				logger.Errorf(err, "error while downloading %s", resourceType)
+				errCh <- fmt.Errorf("error while downloading %s: %v", resourceType, err)
 				logger.Debugf("canceling context to stop running jobs")
 				cancel()
 				return
 			}
 
-			logger.Infof("finished downloading '%s' (%d/%d)", r, atomic.AddUint64(&done, 1), len(repos))
-		}(logger.With(log.Fields{"repo": repo}), repo)
+			logger.Infof("finished downloading '%s' (%d/%d)", p, atomic.AddUint64(&done, 1), len(params))
+		}(logger, p)
 
 		if ctx.Err() != nil {
 			break
@@ -176,7 +224,7 @@ func (c *Ghsync) downloadRepos(logger log.Logger, dp *DownloadersPool, repos []s
 	case err := <-errCh:
 		return err
 	default:
-		logger.Infof("finished downloading repositories")
+		logger.Infof("finished downloading all %ss", resourceType)
 		return nil
 	}
 }
