@@ -2,6 +2,8 @@
 // sources:
 // database/migrations/000001_init.down.sql
 // database/migrations/000001_init.up.sql
+// database/migrations/000002_rename_github_tables.down.sql
+// database/migrations/000002_rename_github_tables.up.sql
 package database
 
 import (
@@ -113,7 +115,47 @@ func _000001_initUpSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "000001_init.up.sql", size: 6059, mode: os.FileMode(420), modTime: time.Unix(1571061269, 0)}
+	info := bindataFileInfo{name: "000001_init.up.sql", size: 6059, mode: os.FileMode(420), modTime: time.Unix(1571827828, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var __000002_rename_github_tablesDownSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xb4\xd0\xcd\x0a\x83\x30\x0c\xc0\xf1\x7b\x9f\xa2\xef\xd1\x93\x8e\x32\x04\x3f\x40\x7a\x2f\x6e\x0b\x2e\xa0\xad\x6b\x5a\x07\x7b\xfa\xdd\x5d\x6a\x4f\x3b\xe7\x9f\x1f\x21\xb5\xbe\x36\xbd\x12\xa2\x6a\x8d\x1e\xa5\xa9\xea\x56\xcb\x19\xe3\x33\xdd\xac\x0f\xf3\xe4\xf0\x33\x45\xf4\x8e\xec\x0e\x81\xd0\x3b\x78\xc8\x51\xf7\x55\xa7\xa5\x19\x64\xa6\x50\x9c\x96\x08\x02\xaf\x1c\x26\xec\x76\x80\xcd\x13\x46\x1f\x10\x78\x84\x0f\x58\x0b\x89\x52\x46\x39\x8e\xf2\xfb\xf6\xee\xd7\x15\x5c\x3c\x71\x98\xe4\x0f\x9f\xd9\xd2\xb2\xd8\x00\xaf\x04\x94\x39\x26\x53\x14\x35\x1b\x60\x47\x78\x97\xd1\xdf\xb0\x6c\x9f\xbe\xaf\x50\x2a\x21\x2e\x43\xd7\x35\x46\x89\x6f\x00\x00\x00\xff\xff\x5c\x3d\xe0\x71\xbf\x02\x00\x00")
+
+func _000002_rename_github_tablesDownSqlBytes() ([]byte, error) {
+	return bindataRead(
+		__000002_rename_github_tablesDownSql,
+		"000002_rename_github_tables.down.sql",
+	)
+}
+
+func _000002_rename_github_tablesDownSql() (*asset, error) {
+	bytes, err := _000002_rename_github_tablesDownSqlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "000002_rename_github_tables.down.sql", size: 703, mode: os.FileMode(420), modTime: time.Unix(1571828565, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var __000002_rename_github_tablesUpSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x8c\x92\x4d\x6e\xb3\x30\x10\x40\xf7\x3e\xc5\x5c\x20\x27\x60\x95\x7c\x9f\x5b\x21\x85\x50\x11\xd4\x76\x87\x0c\x4c\xd3\x91\x00\xd3\xb1\xa1\x6a\x4e\x5f\x41\xd4\x1f\xa7\xd8\x61\x87\x34\x6f\x1e\xe2\x0d\x3b\x79\x1f\x1f\x22\x21\x36\x1b\xa8\x59\xf7\x30\x12\xbe\x1b\xb0\x1a\x4a\x04\x55\x36\x38\x3d\x56\x8c\xca\x22\xb4\xca\x22\x93\x6a\xe8\x8c\xf5\x85\x13\xff\xb3\xf4\x01\x1e\x63\xf9\x04\xf1\x1d\xc8\xe7\xf8\x98\x1f\x41\xf3\x49\x75\x74\x56\x96\x74\x67\xa2\x45\x64\x30\xc8\x9e\x11\x63\xaf\x0d\x59\xcd\x84\x1e\x82\x8c\x19\x82\xb3\xa2\xd2\x6d\x8b\x9d\xf5\x30\xfd\xd0\x34\x05\xe3\xdb\x80\x66\x0d\x52\x30\xce\xdf\xba\x82\xfc\x79\xef\x94\x93\xb1\x53\x2d\x82\x9d\x2a\xce\x45\x4d\x8f\x15\xbd\x7c\x40\xcf\x7a\xa4\x1a\x59\x6c\xf7\xb9\xcc\x20\xdf\xee\xf6\xd2\xad\x56\x8c\xc8\x86\x74\x87\x35\x64\xf2\xb0\x4d\x24\xe4\x29\x9c\xc8\xbe\x0e\x65\xe1\x01\x23\xc7\x36\x07\x0e\x59\xae\x00\x77\xfb\xf7\x0d\x42\x92\x65\xce\x75\x5d\xae\x15\xb2\x5c\x13\x0b\xfb\xdf\x65\x6f\x7a\x16\x48\xd7\xe7\x5c\x3f\xa4\xf3\x80\x7e\xdb\xd7\x8f\xb2\x56\xfa\x97\x0f\xb8\xd7\x04\xb8\xb1\x10\x09\xf1\x2f\x4d\x92\x38\x8f\xc4\x67\x00\x00\x00\xff\xff\x9a\x3a\xc2\xa9\xf5\x03\x00\x00")
+
+func _000002_rename_github_tablesUpSqlBytes() ([]byte, error) {
+	return bindataRead(
+		__000002_rename_github_tablesUpSql,
+		"000002_rename_github_tables.up.sql",
+	)
+}
+
+func _000002_rename_github_tablesUpSql() (*asset, error) {
+	bytes, err := _000002_rename_github_tablesUpSqlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "000002_rename_github_tables.up.sql", size: 1013, mode: os.FileMode(420), modTime: time.Unix(1571828565, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -170,8 +212,10 @@ func AssetNames() []string {
 
 // _bindata is a table, holding each asset generator, mapped to its name.
 var _bindata = map[string]func() (*asset, error){
-	"000001_init.down.sql": _000001_initDownSql,
-	"000001_init.up.sql":   _000001_initUpSql,
+	"000001_init.down.sql":                 _000001_initDownSql,
+	"000001_init.up.sql":                   _000001_initUpSql,
+	"000002_rename_github_tables.down.sql": _000002_rename_github_tablesDownSql,
+	"000002_rename_github_tables.up.sql":   _000002_rename_github_tablesUpSql,
 }
 
 // AssetDir returns the file names below a certain
@@ -215,8 +259,10 @@ type bintree struct {
 }
 
 var _bintree = &bintree{nil, map[string]*bintree{
-	"000001_init.down.sql": &bintree{_000001_initDownSql, map[string]*bintree{}},
-	"000001_init.up.sql":   &bintree{_000001_initUpSql, map[string]*bintree{}},
+	"000001_init.down.sql":                 &bintree{_000001_initDownSql, map[string]*bintree{}},
+	"000001_init.up.sql":                   &bintree{_000001_initUpSql, map[string]*bintree{}},
+	"000002_rename_github_tables.down.sql": &bintree{_000002_rename_github_tablesDownSql, map[string]*bintree{}},
+	"000002_rename_github_tables.up.sql":   &bintree{_000002_rename_github_tablesUpSql, map[string]*bintree{}},
 }}
 
 // RestoreAsset restores an asset under the given directory
