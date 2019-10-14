@@ -51,14 +51,14 @@ const (
 )
 
 var tables = []string{
-	"organizations_versioned",
-	"users_versioned",
-	"repositories_versioned",
-	"issues_versioned",
-	"issue_comments_versioned",
-	"pull_requests_versioned",
-	"pull_request_reviews_versioned",
-	"pull_request_comments_versioned",
+	"github_organizations_versioned",
+	"github_users_versioned",
+	"github_repositories_versioned",
+	"github_issues_versioned",
+	"github_issue_comments_versioned",
+	"github_pull_requests_versioned",
+	"github_pull_request_reviews_versioned",
+	"github_pull_request_comments_versioned",
 }
 
 func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
@@ -70,7 +70,7 @@ func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 	}
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW owners AS
 	SELECT login, name
-	FROM organizations_versioned WHERE %v = ANY(versions)`, v))
+	FROM github_organizations_versioned WHERE %v = ANY(versions)`, v))
 	if err != nil {
 		return fmt.Errorf("failed to create unified view owners: %v", err)
 	}
@@ -81,7 +81,7 @@ func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 	}
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW users AS
 	SELECT login, name
-	FROM users_versioned WHERE %v = ANY(versions)`, v))
+	FROM github_users_versioned WHERE %v = ANY(versions)`, v))
 	if err != nil {
 		return fmt.Errorf("failed to create unified view users: %v", err)
 	}
@@ -92,7 +92,7 @@ func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 	}
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW repositories AS
 	SELECT owner_login AS owner, name, full_name, private, description
-	FROM repositories_versioned WHERE %v = ANY(versions)`, v))
+	FROM github_repositories_versioned WHERE %v = ANY(versions)`, v))
 	if err != nil {
 		return fmt.Errorf("failed to create unified view repositories: %v", err)
 	}
@@ -105,7 +105,7 @@ func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 	SELECT repository_owner, repository_name, repository_owner || '/' || repository_name AS repository_full_name,
            number, state, title, body,
            created_at, closed_at, updated_at, comments, user_id, user_login, htmlurl AS html_url, labels
-	FROM issues_versioned WHERE %v = ANY(versions)`, v))
+	FROM github_issues_versioned WHERE %v = ANY(versions)`, v))
 	if err != nil {
 		return fmt.Errorf("failed to create unified view issues: %v", err)
 	}
@@ -117,8 +117,8 @@ func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW issue_comments AS
 	SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
 	       c.issue_number, c.created_at, c.body, c.user_id, c.user_login, c.htmlurl AS html_url
-	FROM issue_comments_versioned AS c
-	JOIN issues_versioned AS i ON
+	FROM github_issue_comments_versioned AS c
+	JOIN github_issues_versioned AS i ON
 		 i.repository_owner = c.repository_owner AND
 		 i.repository_name = c.repository_name AND
 		 i.number = c.issue_number WHERE %v = ANY(c.versions)`, v))
@@ -137,7 +137,7 @@ func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 	       user_id, user_login, base_repository_name, base_repository_owner,
 	       base_repository_name || '/' || base_repository_owner AS base_repository_full_name,
 	       head_ref, head_sha, merge_commit_sha, htmlurl AS html_url, labels
-	FROM pull_requests_versioned WHERE %v = ANY(versions)`, v))
+	FROM github_pull_requests_versioned WHERE %v = ANY(versions)`, v))
 	if err != nil {
 		return fmt.Errorf("failed to create unified view pull_requests: %v", err)
 	}
@@ -150,7 +150,7 @@ func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW pull_request_reviews AS
 	SELECT repository_owner, repository_name, repository_owner || '/' || repository_name AS repository_full_name,
 	       pull_request_number, state, submitted_at AS created_at, user_id, user_login, htmlurl AS html_url
-	FROM pull_request_reviews_versioned WHERE %v = ANY(versions)`, v))
+	FROM github_pull_request_reviews_versioned WHERE %v = ANY(versions)`, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW pull_request_reviews: %v", err)
 	}
@@ -162,8 +162,8 @@ func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW pull_request_comments AS
 	SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
 		   issue_number AS pull_request_number, c.created_at, c.body, c.user_id, c.user_login, c.htmlurl AS html_url
-	FROM issue_comments_versioned AS c
-	JOIN pull_requests_versioned AS p ON
+	FROM github_issue_comments_versioned AS c
+	JOIN github_pull_requests_versioned AS p ON
 		 p.repository_owner = c.repository_owner AND
 		 p.repository_name = c.repository_name AND
 		 p.number = c.issue_number WHERE %v = ANY(c.versions)`, v))
@@ -175,56 +175,56 @@ func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_organizations AS
 	SELECT %s
-	FROM organizations_versioned WHERE %v = ANY(versions)`, organizationsCols, v))
+	FROM github_organizations_versioned WHERE %v = ANY(versions)`, organizationsCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW organizations: %v", err)
 	}
 
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_users AS
 	SELECT %s
-	FROM users_versioned WHERE %v = ANY(versions)`, usersCols, v))
+	FROM github_users_versioned WHERE %v = ANY(versions)`, usersCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW users: %v", err)
 	}
 
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_repositories AS
 	SELECT %s
-	FROM repositories_versioned WHERE %v = ANY(versions)`, repositoriesCols, v))
+	FROM github_repositories_versioned WHERE %v = ANY(versions)`, repositoriesCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW repositories: %v", err)
 	}
 
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_issues AS
 	SELECT %s
-	FROM issues_versioned WHERE %v = ANY(versions)`, issuesCols, v))
+	FROM github_issues_versioned WHERE %v = ANY(versions)`, issuesCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW issues: %v", err)
 	}
 
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_issue_comments AS
 	SELECT %s
-	FROM issue_comments_versioned WHERE %v = ANY(versions)`, issueCommentsCols, v))
+	FROM github_issue_comments_versioned WHERE %v = ANY(versions)`, issueCommentsCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW issue_comments: %v", err)
 	}
 
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_pull_requests AS
 	SELECT %s
-	FROM pull_requests_versioned WHERE %v = ANY(versions)`, pullRequestsCol, v))
+	FROM github_pull_requests_versioned WHERE %v = ANY(versions)`, pullRequestsCol, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW pull_requests: %v", err)
 	}
 
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_pull_request_reviews AS
 	SELECT %s
-	FROM pull_request_reviews_versioned WHERE %v = ANY(versions)`, pullRequestReviewsCols, v))
+	FROM github_pull_request_reviews_versioned WHERE %v = ANY(versions)`, pullRequestReviewsCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW pull_request_reviews: %v", err)
 	}
 
 	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_pull_request_comments AS
 	SELECT %s
-	FROM pull_request_comments_versioned WHERE %v = ANY(versions)`, pullRequestReviewCommentsCols, v))
+	FROM github_pull_request_comments_versioned WHERE %v = ANY(versions)`, pullRequestReviewCommentsCols, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW pull_request_comments: %v", err)
 	}
@@ -253,13 +253,13 @@ func (s *DB) Cleanup(ctx context.Context, currentVersion int) error {
 
 func (s *DB) SaveOrganization(ctx context.Context, organization *graphql.Organization) error {
 	statement := fmt.Sprintf(
-		`INSERT INTO organizations_versioned
+		`INSERT INTO github_organizations_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
 			$15, $16)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(organizations_versioned.versions, $17)`,
+		SET versions = array_append(github_organizations_versioned.versions, $17)`,
 		organizationsCols)
 
 	st := fmt.Sprintf("%+v", organization)
@@ -296,13 +296,13 @@ func (s *DB) SaveOrganization(ctx context.Context, organization *graphql.Organiz
 
 func (s *DB) SaveUser(ctx context.Context, orgID int, orgLogin string, user *graphql.UserExtended) error {
 	statement := fmt.Sprintf(
-		`INSERT INTO users_versioned
+		`INSERT INTO github_users_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
 			$15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(users_versioned.versions, $25)`,
+		SET versions = array_append(github_users_versioned.versions, $25)`,
 		usersCols)
 
 	st := fmt.Sprintf("%+v", user)
@@ -349,14 +349,14 @@ func (s *DB) SaveUser(ctx context.Context, orgID int, orgLogin string, user *gra
 
 func (s *DB) SaveRepository(ctx context.Context, repository *graphql.RepositoryFields, topics []string) error {
 	statement := fmt.Sprintf(
-		`INSERT INTO repositories_versioned
+		`INSERT INTO github_repositories_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
 			$15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29,
 			$30, $31, $32)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(repositories_versioned.versions, $33)`,
+		SET versions = array_append(github_repositories_versioned.versions, $33)`,
 		repositoriesCols)
 
 	st := fmt.Sprintf("%+v %v", repository, topics)
@@ -420,13 +420,13 @@ func repoOwnerID(repository *graphql.RepositoryFields) int {
 
 func (s *DB) SaveIssue(ctx context.Context, repositoryOwner, repositoryName string, issue *graphql.Issue, assignees []string, labels []string) error {
 	statement := fmt.Sprintf(
-		`INSERT INTO issues_versioned
+		`INSERT INTO github_issues_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
 			$15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(issues_versioned.versions, $25)`,
+		SET versions = array_append(github_issues_versioned.versions, $25)`,
 		issuesCols)
 
 	st := fmt.Sprintf("%v %v %+v %v %v", repositoryOwner, repositoryName, issue, assignees, labels)
@@ -478,12 +478,12 @@ func (s *DB) SaveIssue(ctx context.Context, repositoryOwner, repositoryName stri
 }
 
 func (s *DB) SaveIssueComment(ctx context.Context, repositoryOwner, repositoryName string, issueNumber int, comment *graphql.IssueComment) error {
-	statement := fmt.Sprintf(`INSERT INTO issue_comments_versioned
+	statement := fmt.Sprintf(`INSERT INTO github_issue_comments_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(issue_comments_versioned.versions, $15)`,
+		SET versions = array_append(github_issue_comments_versioned.versions, $15)`,
 		issueCommentsCols)
 
 	st := fmt.Sprintf("%v %v %v %+v", repositoryOwner, repositoryName, issueNumber, comment)
@@ -518,14 +518,14 @@ func (s *DB) SaveIssueComment(ctx context.Context, repositoryOwner, repositoryNa
 
 func (s *DB) SavePullRequest(ctx context.Context, repositoryOwner, repositoryName string, pr *graphql.PullRequest, assignees []string, labels []string) error {
 	statement := fmt.Sprintf(
-		`INSERT INTO pull_requests_versioned
+		`INSERT INTO github_pull_requests_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
 			$15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29,
 			$30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(pull_requests_versioned.versions, $45)`,
+		SET versions = array_append(github_pull_requests_versioned.versions, $45)`,
 		pullRequestsCol)
 
 	st := fmt.Sprintf("%v %v %+v %v %v", repositoryOwner, repositoryName, pr, assignees, labels)
@@ -594,12 +594,12 @@ func (s *DB) SavePullRequestComment(ctx context.Context, repositoryOwner, reposi
 }
 
 func (s *DB) SavePullRequestReview(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
-	statement := fmt.Sprintf(`INSERT INTO pull_request_reviews_versioned
+	statement := fmt.Sprintf(`INSERT INTO github_pull_request_reviews_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(pull_request_reviews_versioned.versions, $15)`,
+		SET versions = array_append(github_pull_request_reviews_versioned.versions, $15)`,
 		pullRequestReviewsCols)
 
 	st := fmt.Sprintf("%v %v %v %+v", repositoryOwner, repositoryName, pullRequestNumber, review)
@@ -633,13 +633,13 @@ func (s *DB) SavePullRequestReview(ctx context.Context, repositoryOwner, reposit
 }
 
 func (s *DB) SavePullRequestReviewComment(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewId int, comment *graphql.PullRequestReviewComment) error {
-	statement := fmt.Sprintf(`INSERT INTO pull_request_comments_versioned
+	statement := fmt.Sprintf(`INSERT INTO github_pull_request_comments_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
 			$15, $16, $17, $18, $19, $20, $21, $22)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(pull_request_comments_versioned.versions, $23)`,
+		SET versions = array_append(github_pull_request_comments_versioned.versions, $23)`,
 		pullRequestReviewCommentsCols)
 
 	st := fmt.Sprintf("%v %v %v %v %+v", repositoryOwner, repositoryName, pullRequestNumber, pullRequestReviewId, comment)
