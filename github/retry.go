@@ -2,6 +2,7 @@ package github
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -29,6 +30,10 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	retry(func() error {
 		r, err = t.T.RoundTrip(req)
 		if err != nil {
+			if err == context.Canceled {
+				return &errUnretriable{Err: err}
+			}
+
 			return err
 		}
 
