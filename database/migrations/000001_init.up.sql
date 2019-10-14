@@ -5,21 +5,18 @@ CREATE TABLE IF NOT EXISTS organizations_versioned (
   versions integer ARRAY,
 
   avatar_url text,
-  billing_email text,
   collaborators bigint,
   created_at timestamptz,
   description text,
   email text,
   htmlurl text,
   id bigint,
-  location text,
   login text,
   name text,
   node_id text,
   owned_private_repos bigint,
   public_repos bigint,
   total_private_repos bigint,
-  two_factor_requirement_enabled boolean,
   updated_at timestamptz
 );
 
@@ -47,7 +44,6 @@ CREATE TABLE IF NOT EXISTS users_versioned (
   private_gists bigint,
   public_gists bigint,
   public_repos bigint,
-  site_admin boolean,
   total_private_repos bigint,
   updated_at timestamptz
 );
@@ -76,7 +72,6 @@ CREATE TABLE IF NOT EXISTS repositories_versioned (
   htmlurl text,
   id bigint,
   language text,
-  mirror_url text,
   name text,
   node_id text,
   open_issues_count bigint,
