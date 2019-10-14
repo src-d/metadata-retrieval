@@ -34,8 +34,8 @@ import (
 )
 
 const (
-	orgRecFile       = "../testdata/organization_src-d_2019-10-11.gob.gz"
-	repoRecFile      = "../testdata/repository_src-d_gitbase_2019-10-11.gob.gz"
+	orgRecFile       = "../testdata/organization_src-d_2019-10-14.gob.gz"
+	repoRecFile      = "../testdata/repository_src-d_gitbase_2019-10-14.gob.gz"
 	onlineRepoTests  = "../testdata/online-repository-tests.json"
 	onlineOrgTests   = "../testdata/online-organization-tests.json"
 	offlineRepoTests = "../testdata/offline-repository-tests.json"
@@ -327,7 +327,7 @@ func (suite *DownloaderTestSuite) TestOnlineOrganizationDownloadWithDB() {
 			&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
 		)), suite.db)
 	suite.NoError(err, "Failed to init the downloader")
-	downloader.SetActiveVersion(0)
+	downloader.SetActiveVersion(context.TODO(), 0)
 	suite.downloader = downloader
 	for _, test := range tests.OrganizationsTests {
 		test := test
@@ -425,7 +425,7 @@ func (suite *DownloaderTestSuite) TestOnlineRepositoryDownloadWithDB() {
 			&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
 		)), suite.db)
 	suite.NoError(err, "Failed to init the downloader")
-	downloader.SetActiveVersion(0)
+	downloader.SetActiveVersion(context.TODO(), 0)
 	suite.downloader = downloader
 	for _, test := range tests.RepositoryTests {
 		test := test
@@ -445,7 +445,7 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownloadWithDB() {
 	// Not using the NewStdoutDownloader initialization because it overides the transport
 	storer := &store.DB{DB: suite.db}
 	downloader := getRoundTripDownloader(reqResp, storer)
-	downloader.SetActiveVersion(0) // Will create the views
+	downloader.SetActiveVersion(context.TODO(), 0) // Will create the views
 	suite.downloader = downloader
 	tests, err := loadTests(offlineOrgTests)
 	suite.NoError(err, "Failed to read the offline tests")
@@ -465,7 +465,7 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithDB() {
 	suite.NoError(loadReqResp(repoRecFile, reqResp), "Failed to read the recordings")
 	storer := &store.DB{DB: suite.db}
 	downloader := getRoundTripDownloader(reqResp, storer)
-	downloader.SetActiveVersion(0)
+	downloader.SetActiveVersion(context.TODO(), 0)
 	suite.downloader = downloader
 	tests, err := loadTests(offlineRepoTests)
 	suite.NoError(err, "Failed to read the offline tests")
@@ -487,7 +487,7 @@ func (suite *DownloaderTestSuite) BeforeTest(suiteName, testName string) {
 func (suite *DownloaderTestSuite) AfterTest(suiteName, testName string) {
 	if testName == "TestOnlineOrganizationDownloadWithDB" || testName == "TestOfflineOrganizationDownloadWithDB" {
 		// I cleanup with a different version (1 vs. 0), so to clean all the data from the DB
-		suite.downloader.Cleanup(1)
+		suite.downloader.Cleanup(context.TODO(), 1)
 		// Check
 		var countOrgs int
 		err := suite.db.QueryRow("select count(*) from organizations").Scan(&countOrgs)
@@ -495,7 +495,7 @@ func (suite *DownloaderTestSuite) AfterTest(suiteName, testName string) {
 		suite.Equal(0, countOrgs)
 	} else if testName == "TestOnlineRepositoryDownloadWithDB" || testName == "TestOfflineRepositoryDownloadWithDB" {
 		// I cleanup with a different version (1 vs. 0), so to clean all the data from the DB
-		suite.downloader.Cleanup(1)
+		suite.downloader.Cleanup(context.TODO(), 1)
 		// Check
 		var countRepos int
 		err := suite.db.QueryRow("select count(*) from repositories").Scan(&countRepos)

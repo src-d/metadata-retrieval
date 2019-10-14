@@ -123,6 +123,7 @@ func encodeAndStore(filename string, reqResp map[string]string) error {
 	if err != nil {
 		return err
 	}
+	defer encodeFile.Close()
 	zw := gzip.NewWriter(encodeFile)
 	defer zw.Close()
 	return gob.NewEncoder(zw).Encode(reqResp)
