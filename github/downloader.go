@@ -31,7 +31,7 @@ const (
 
 type storer interface {
 	SaveOrganization(ctx context.Context, organization *graphql.Organization) error
-	SaveUser(ctx context.Context, user *graphql.UserExtended) error
+	SaveUser(ctx context.Context, orgID int, orgLogin string, user *graphql.UserExtended) error
 	SaveRepository(ctx context.Context, repository *graphql.RepositoryFields, topics []string) error
 	SaveIssue(ctx context.Context, repositoryOwner, repositoryName string, issue *graphql.Issue, assignees []string, labels []string) error
 	SaveIssueComment(ctx context.Context, repositoryOwner, repositoryName string, issueNumber int, comment *graphql.IssueComment) error
@@ -898,7 +898,7 @@ func (d Downloader) downloadUsers(ctx context.Context, name string, organization
 	defer logger.Infof("finished downloading users")
 
 	process := func(user *graphql.UserExtended) error {
-		err := d.storer.SaveUser(ctx, user)
+		err := d.storer.SaveUser(ctx, organization.DatabaseID, organization.Login, user)
 		if err != nil {
 			return fmt.Errorf("failed to save UserExtended: %v", err)
 		}

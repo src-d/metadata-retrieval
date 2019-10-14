@@ -37,7 +37,7 @@ func (s *DB) Version(v int) {
 
 const (
 	organizationsCols             = "avatar_url, collaborators, created_at, description, email, htmlurl, id, login, name, node_id, owned_private_repos, public_repos, total_private_repos, updated_at"
-	usersCols                     = "avatar_url, bio, company, created_at, email, followers, following, hireable, htmlurl, id, location, login, name, node_id, owned_private_repos, private_gists, public_gists, public_repos, total_private_repos, updated_at"
+	usersCols                     = "avatar_url, bio, company, created_at, email, followers, following, hireable, htmlurl, id, location, login, name, node_id, organization_id, organization_login, owned_private_repos, private_gists, public_gists, public_repos, total_private_repos, updated_at"
 	repositoriesCols              = "allow_merge_commit, allow_rebase_merge, allow_squash_merge, archived, created_at, default_branch, description, disabled, fork, forks_count, full_name, has_issues, has_wiki, homepage, htmlurl, id, language, name, node_id, open_issues_count, owner_id, owner_login, owner_type, private, pushed_at, sshurl, stargazers_count, topics, updated_at, watchers_count"
 	issuesCols                    = "assignees, body, closed_at, closed_by_id, closed_by_login, comments, created_at, htmlurl, id, labels, locked, milestone_id, milestone_title, node_id, number, repository_name, repository_owner, state, title, updated_at, user_id, user_login"
 	issueCommentsCols             = "author_association, body, created_at, htmlurl, id, issue_number, node_id, repository_name, repository_owner, updated_at, user_id, user_login"
@@ -182,15 +182,15 @@ func (s *DB) SaveOrganization(ctx context.Context, organization *graphql.Organiz
 	return nil
 }
 
-func (s *DB) SaveUser(ctx context.Context, user *graphql.UserExtended) error {
+func (s *DB) SaveUser(ctx context.Context, orgID int, orgLogin string, user *graphql.UserExtended) error {
 	statement := fmt.Sprintf(
 		`INSERT INTO users_versioned
 		(sum256, versions, %s)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-			$15, $16, $17, $18, $19, $20, $21, $22)
+			$15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
 		ON CONFLICT (sum256)
 		DO UPDATE
-		SET versions = array_append(users_versioned.versions, $23)`,
+		SET versions = array_append(users_versioned.versions, $25)`,
 		usersCols)
 
 	st := fmt.Sprintf("%+v", user)
@@ -216,6 +216,8 @@ func (s *DB) SaveUser(ctx context.Context, user *graphql.UserExtended) error {
 		user.Login,                        // login text,
 		user.Name,                         // name text,
 		user.ID,                           // node_id text,
+		orgID,                             // organization_id bigint NOT NULL
+		orgLogin,                          // organization_login text NOT NULL
 		user.OwnedPrivateRepos.TotalCount, // owned_private_repos bigint,
 		// TODO: gists makes the server return: You don't have permission to see gists.
 		0,                                 // private_gists bigint,

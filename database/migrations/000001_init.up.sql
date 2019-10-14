@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS users_versioned (
   login text,
   name text,
   node_id text,
+  organization_id bigint NOT NULL,
+  organization_login text NOT NULL,
   owned_private_repos bigint,
   private_gists bigint,
   public_gists bigint,
