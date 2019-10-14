@@ -1,0 +1,43 @@
+{
+    "repositoryTests" :
+    [
+        {
+            "owner": "git-fixtures",
+            "repository": "basic"
+        },
+        {
+            "owner": "git-fixtures",
+            "repository": "symlinks"
+        },
+        {
+            "owner": "git-fixtures",
+            "repository": "submodule"
+        },
+        {
+            "owner": "git-fixtures",
+            "repository": "releases"
+        },
+        {
+            "owner": "git-fixtures",
+            "repository": "tags"
+        },
+        {
+            "owner": "git-fixtures",
+            "repository": "empty"
+        },
+        {
+            "owner": "git-fixtures",
+            "repository": "small-several-contributors"
+        },
+        {
+            "owner": "git-fixtures",
+            "repository": "small-several-contributors-with-prs"
+        }
+    ],
+    "organizationTests" :
+    [
+        {
+            "org": "git-fixtures"
+        }
+    ]
+}

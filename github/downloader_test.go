@@ -34,12 +34,13 @@ import (
 )
 
 const (
-	orgRecFile       = "../testdata/organization_src-d_2019-10-14.gob.gz"
-	repoRecFile      = "../testdata/repository_src-d_gitbase_2019-10-14.gob.gz"
-	onlineRepoTests  = "../testdata/online-repository-tests.json"
-	onlineOrgTests   = "../testdata/online-organization-tests.json"
-	offlineRepoTests = "../testdata/offline-repository-tests.json"
-	offlineOrgTests  = "../testdata/offline-organization-tests.json"
+	orgRecFile           = "../testdata/organization_src-d_2019-10-14.gob.gz"
+	repoRecFile          = "../testdata/repository_src-d_gitbase_2019-10-14.gob.gz"
+	onlineRepoTests      = "../testdata/online-repository-tests.json"
+	onlineReposListTests = "../testdata/online-repositories-list-tests.json"
+	onlineOrgTests       = "../testdata/online-organization-tests.json"
+	offlineRepoTests     = "../testdata/offline-repository-tests.json"
+	offlineOrgTests      = "../testdata/offline-organization-tests.json"
 )
 
 // loads requests-response data from a gob file
@@ -135,14 +136,15 @@ func getDownloader() (*Downloader, *testutils.Memory, error) {
 }
 
 // Tests:
-// 1. Online (live) download with token for git-fixtures org and memory cache
-// 2. Online (live) download with token for git-fixtures repos and memory cache
+// 1. Online (live) list repositories for git-fixtures org
+// 2. Online (live) download with token for git-fixtures org and memory cache
+// 3. Online (live) download with token for git-fixtures repos and memory cache
 // 4. Offline (recorded) download without token for src-d/gitbase repo and memory cache
-// 3. Offline (recorded) download without token for src-d org and memory cache
-// 5. Online (live) download with token for git-fixtures org and DB
-// 6. Online (live) download with token for git-fixtures repos and DB
-// 7. Offline (recorded) download without token for src-d org and DB
-// 8. Offline (recorded) download without token for src-d/gitbase repo and DB
+// 5. Offline (recorded) download without token for src-d org and memory cache
+// 6. Online (live) download with token for git-fixtures org and DB
+// 7. Online (live) download with token for git-fixtures repos and DB
+// 8. Offline (recorded) download without token for src-d org and DB
+// 9. Offline (recorded) download without token for src-d/gitbase repo and DB
 
 type DownloaderTestSuite struct {
 	suite.Suite
@@ -155,6 +157,27 @@ func (suite *DownloaderTestSuite) SetupSuite() {
 		suite.db = getDB(suite.T())
 		suite.NotNil(suite.db)
 	}
+}
+
+// TestOnlineRepositoryDownload Tests the listing of repositories of a known and fixed GitHub organization
+func (suite *DownloaderTestSuite) TestOnlineListRepositories() {
+	t := suite.T()
+	checkToken(t)
+	tests, err := loadTests(onlineReposListTests)
+	suite.NoError(err, "Failed to read the testcases")
+	downloader, _, err := getDownloader()
+	suite.NoError(err, "Failed to instantiate downloader")
+
+	var expectedRepos []string
+	for _, test := range tests.RepositoryTests {
+		expectedRepos = append(expectedRepos, test.Repository)
+	}
+
+	test := tests.OrganizationsTests[0]
+	repos, err := downloader.ListRepositories(context.TODO(), test.Org, true)
+	suite.NoError(err, "Error while listing repositories")
+
+	suite.ElementsMatch(expectedRepos, repos)
 }
 
 // TestOnlineRepositoryDownload Tests the download of known and fixed GitHub repositories
