@@ -1,6 +1,8 @@
 package testutils
 
 import (
+	"context"
+
 	"github.com/src-d/metadata-retrieval/github/graphql"
 
 	"gopkg.in/src-d/go-log.v1"
@@ -18,7 +20,7 @@ type Memory struct {
 
 // SaveOrganization stores an organization in memory,
 // it also initializes the list of users
-func (s *Memory) SaveOrganization(organization *graphql.Organization) error {
+func (s *Memory) SaveOrganization(ctx context.Context, organization *graphql.Organization) error {
 	log.Infof("organization data fetched for %s\n", organization.Login)
 	s.Organization = organization
 	// Initialize users to 0 for each repo
@@ -27,7 +29,7 @@ func (s *Memory) SaveOrganization(organization *graphql.Organization) error {
 }
 
 // SaveUser appends a user to the user list in memory
-func (s *Memory) SaveUser(user *graphql.UserExtended) error {
+func (s *Memory) SaveUser(ctx context.Context, user *graphql.UserExtended) error {
 	log.Infof("user data fetched for %s\n", user.Login)
 	s.Users = append(s.Users, user)
 	return nil
@@ -35,7 +37,7 @@ func (s *Memory) SaveUser(user *graphql.UserExtended) error {
 
 // SaveRepository stores a repository and its topics in memory and
 // initializes PRs and PR comments
-func (s *Memory) SaveRepository(repository *graphql.RepositoryFields, topics []string) error {
+func (s *Memory) SaveRepository(ctx context.Context, repository *graphql.RepositoryFields, topics []string) error {
 	log.Infof("repository data fetched for %s/%s\n", repository.Owner.Login, repository.Name)
 	s.Repository = repository
 	s.Topics = topics
@@ -48,39 +50,39 @@ func (s *Memory) SaveRepository(repository *graphql.RepositoryFields, topics []s
 // TODO(kyrcha): add memory in noop methods as the tests expand
 
 // SaveIssue noop
-func (s *Memory) SaveIssue(repositoryOwner, repositoryName string, issue *graphql.Issue, assignees []string, labels []string) error {
+func (s *Memory) SaveIssue(ctx context.Context, repositoryOwner, repositoryName string, issue *graphql.Issue, assignees []string, labels []string) error {
 	log.Infof("issue data fetched for #%v %s\n", issue.Number, issue.Title)
 	return nil
 }
 
 // SaveIssueComment noop
-func (s *Memory) SaveIssueComment(repositoryOwner, repositoryName string, issueNumber int, comment *graphql.IssueComment) error {
+func (s *Memory) SaveIssueComment(ctx context.Context, repositoryOwner, repositoryName string, issueNumber int, comment *graphql.IssueComment) error {
 	log.Infof(" \tissue comment data fetched by %s at %v: %q\n", comment.Author.Login, comment.CreatedAt, trim(comment.Body))
 	return nil
 }
 
 // SavePullRequest appends an PR to the PR list in memory
-func (s *Memory) SavePullRequest(repositoryOwner, repositoryName string, pr *graphql.PullRequest, assignees []string, labels []string) error {
+func (s *Memory) SavePullRequest(ctx context.Context, repositoryOwner, repositoryName string, pr *graphql.PullRequest, assignees []string, labels []string) error {
 	log.Infof("PR data fetched for #%v %s\n", pr.Number, pr.Title)
 	s.PRs = append(s.PRs, pr)
 	return nil
 }
 
 // SavePullRequestComment appends an PR comment to the PR comment list in memory
-func (s *Memory) SavePullRequestComment(repositoryOwner, repositoryName string, pullRequestNumber int, comment *graphql.IssueComment) error {
+func (s *Memory) SavePullRequestComment(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, comment *graphql.IssueComment) error {
 	log.Infof("\tpr comment data fetched by %s at %v: %q\n", comment.Author.Login, comment.CreatedAt, trim(comment.Body))
 	s.PRComments = append(s.PRComments, comment)
 	return nil
 }
 
 // SavePullRequestReview noop
-func (s *Memory) SavePullRequestReview(repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
+func (s *Memory) SavePullRequestReview(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
 	log.Infof(" \tPR Review data fetched by %s at %v: %q\n", review.Author.Login, review.SubmittedAt, trim(review.Body))
 	return nil
 }
 
 // SavePullRequestReviewComment noop
-func (s *Memory) SavePullRequestReviewComment(repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewID int, comment *graphql.PullRequestReviewComment) error {
+func (s *Memory) SavePullRequestReviewComment(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewID int, comment *graphql.PullRequestReviewComment) error {
 	log.Infof("\t\tPR review comment data fetched by %s at %v: %q\n", comment.Author.Login, comment.CreatedAt, trim(comment.Body))
 	return nil
 }
@@ -105,12 +107,12 @@ func (s *Memory) Version(v int) {
 }
 
 // SetActiveVersion is a noop method at the moment
-func (s *Memory) SetActiveVersion(v int) error {
+func (s *Memory) SetActiveVersion(ctx context.Context, v int) error {
 	return nil
 }
 
 // Cleanup is a noop method at the moment
-func (s *Memory) Cleanup(currentVersion int) error {
+func (s *Memory) Cleanup(ctx context.Context, currentVersion int) error {
 	return nil
 }
 
