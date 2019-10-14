@@ -371,7 +371,7 @@ make migration
 
 ### Testing
 
-To test run:
+To test, run:
 
 ```
 GITHUB_TOKEN=<xxx> go test ./...
@@ -380,9 +380,13 @@ GITHUB_TOKEN=<xxx> go test ./...
 and 
 
 ```
-GITHUB_TOKEN=<xxx> go test -cover ./...
+GITHUB_TOKEN=<xxx> go test -coverpkg=./... -coverprofile=coverage.out ./...
 ```
 
-for coverage information.
+for coverage information on all the packages which can be seen with:
+
+```
+go tool cover -html=coverage.out
+```
 
 Where `GITHUB_TOKEN` is a personal access token (scopes **read:org**, **repo**).
