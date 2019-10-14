@@ -45,7 +45,7 @@ func (s *Memory) SaveOrganization(ctx context.Context, organization *graphql.Org
 }
 
 // SaveUser appends a user to the user list in memory
-func (s *Memory) SaveUser(ctx context.Context, user *graphql.UserExtended) error {
+func (s *Memory) SaveUser(ctx context.Context, orgID int, orgLogin string, user *graphql.UserExtended) error {
 	log.Infof("user data fetched for %s\n", user.Login)
 	s.Users = append(s.Users, user)
 	return nil

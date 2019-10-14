@@ -14,7 +14,7 @@ func (s *Stdout) SaveOrganization(ctx context.Context, organization *graphql.Org
 	return nil
 }
 
-func (s *Stdout) SaveUser(ctx context.Context, user *graphql.UserExtended) error {
+func (s *Stdout) SaveUser(ctx context.Context, orgID int, orgLogin string, user *graphql.UserExtended) error {
 	fmt.Printf("user data fetched for %s\n", user.Login)
 	return nil
 }
