@@ -91,7 +91,7 @@ func testOnlineRepo(t *testing.T, oracle RepositoryTest, d *Downloader, storer *
 	require := require.New(t) // Make a new require object for the specified test, so no need to pass it around
 	require.Nil(err)
 	// Sample some properties that will not change, no topics available in git-fixtures
-	require.Equal(oracle.URL, storer.Repository.Url)
+	require.Equal(oracle.URL, storer.Repository.URL)
 	require.Equal(oracle.CreatedAt, storer.Repository.CreatedAt.String())
 	require.Equal(oracle.IsPrivate, storer.Repository.IsPrivate)
 	require.Equal(oracle.IsArchived, storer.Repository.IsArchived)
@@ -125,7 +125,7 @@ func testOnlineOrg(t *testing.T, oracle OrganizationTest, d *Downloader, storer 
 	require.Nil(err, "DownloadOrganization(%s) failed", oracle.Org)
 	// Sample some properties that will not change, no topics available in git-fixtures
 	require.Equal(oracle.Org, storer.Organization.Name)
-	require.Equal(oracle.URL, storer.Organization.Url)
+	require.Equal(oracle.URL, storer.Organization.URL)
 	require.Equal(oracle.CreatedAt, storer.Organization.CreatedAt.String())
 	require.Equal(oracle.PublicRepos, storer.Organization.PublicRepos.TotalCount)
 	require.Equal(oracle.TotalPrivateRepos, storer.Organization.TotalPrivateRepos.TotalCount)

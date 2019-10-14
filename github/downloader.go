@@ -38,7 +38,7 @@ type storer interface {
 	SavePullRequest(ctx context.Context, repositoryOwner, repositoryName string, pr *graphql.PullRequest, assignees []string, labels []string) error
 	SavePullRequestComment(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, comment *graphql.IssueComment) error
 	SavePullRequestReview(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error
-	SavePullRequestReviewComment(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewId int, comment *graphql.PullRequestReviewComment) error
+	SavePullRequestReviewComment(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewID int, comment *graphql.PullRequestReviewComment) error
 
 	Begin() error
 	Commit() error
@@ -197,7 +197,7 @@ func (d Downloader) downloadTopics(ctx context.Context, repository *graphql.Repo
 	}
 
 	variables := map[string]interface{}{
-		"id": githubv4.ID(repository.Id),
+		"id": githubv4.ID(repository.ID),
 
 		"repositoryTopicsPage":   githubv4.Int(repositoryTopicsPage),
 		"repositoryTopicsCursor": (*githubv4.String)(nil),
@@ -269,7 +269,7 @@ func (d Downloader) downloadIssues(ctx context.Context, owner string, name strin
 	}
 
 	variables := map[string]interface{}{
-		"id": githubv4.ID(repository.Id),
+		"id": githubv4.ID(repository.ID),
 
 		"assigneesPage":     githubv4.Int(assigneesPage),
 		"issueCommentsPage": githubv4.Int(issueCommentsPage),
@@ -331,7 +331,7 @@ func (d Downloader) downloadIssueAssignees(ctx context.Context, issue *graphql.I
 	}
 
 	variables := map[string]interface{}{
-		"id": githubv4.ID(issue.Id),
+		"id": githubv4.ID(issue.ID),
 
 		"assigneesPage":   githubv4.Int(assigneesPage),
 		"assigneesCursor": (*githubv4.String)(nil),
@@ -378,7 +378,7 @@ func (d Downloader) downloadIssueLabels(ctx context.Context, issue *graphql.Issu
 	}
 
 	variables := map[string]interface{}{
-		"id": githubv4.ID(issue.Id),
+		"id": githubv4.ID(issue.ID),
 
 		"labelsPage":   githubv4.Int(labelsPage),
 		"labelsCursor": (*githubv4.String)(nil),
@@ -426,7 +426,7 @@ func (d Downloader) downloadIssueComments(ctx context.Context, owner string, nam
 	}
 
 	variables := map[string]interface{}{
-		"id": githubv4.ID(issue.Id),
+		"id": githubv4.ID(issue.ID),
 
 		"issueCommentsPage":   githubv4.Int(issueCommentsPage),
 		"issueCommentsCursor": (*githubv4.String)(nil),
@@ -510,7 +510,7 @@ func (d Downloader) downloadPullRequests(ctx context.Context, owner string, name
 	}
 
 	variables := map[string]interface{}{
-		"id": githubv4.ID(repository.Id),
+		"id": githubv4.ID(repository.ID),
 
 		"assigneesPage":                 githubv4.Int(assigneesPage),
 		"issueCommentsPage":             githubv4.Int(issueCommentsPage),
@@ -576,7 +576,7 @@ func (d Downloader) downloadPullRequestAssignees(ctx context.Context, pr *graphq
 	}
 
 	variables := map[string]interface{}{
-		"id": githubv4.ID(pr.Id),
+		"id": githubv4.ID(pr.ID),
 
 		"assigneesPage":   githubv4.Int(assigneesPage),
 		"assigneesCursor": (*githubv4.String)(nil),
@@ -623,7 +623,7 @@ func (d Downloader) downloadPullRequestLabels(ctx context.Context, pr *graphql.P
 	}
 
 	variables := map[string]interface{}{
-		"id": githubv4.ID(pr.Id),
+		"id": githubv4.ID(pr.ID),
 
 		"labelsPage":   githubv4.Int(assigneesPage),
 		"labelsCursor": (*githubv4.String)(nil),
@@ -671,7 +671,7 @@ func (d Downloader) downloadPullRequestComments(ctx context.Context, owner strin
 	}
 
 	variables := map[string]interface{}{
-		"id": githubv4.ID(pr.Id),
+		"id": githubv4.ID(pr.ID),
 
 		"issueCommentsPage":   githubv4.Int(issueCommentsPage),
 		"issueCommentsCursor": (*githubv4.String)(nil),
@@ -730,7 +730,7 @@ func (d Downloader) downloadPullRequestReviews(ctx context.Context, owner string
 	}
 
 	variables := map[string]interface{}{
-		"id": githubv4.ID(pr.Id),
+		"id": githubv4.ID(pr.ID),
 
 		"pullRequestReviewCommentsPage": githubv4.Int(pullRequestReviewCommentsPage),
 		"pullRequestReviewsPage":        githubv4.Int(pullRequestReviewsPage),
@@ -776,11 +776,11 @@ func (d Downloader) downloadPullRequestReviews(ctx context.Context, owner string
 
 func (d Downloader) downloadReviewComments(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
 	process := func(comment *graphql.PullRequestReviewComment) error {
-		err := d.storer.SavePullRequestReviewComment(ctx, repositoryOwner, repositoryName, pullRequestNumber, review.DatabaseId, comment)
+		err := d.storer.SavePullRequestReviewComment(ctx, repositoryOwner, repositoryName, pullRequestNumber, review.DatabaseID, comment)
 		if err != nil {
 			return fmt.Errorf(
 				"failed to save PullRequestReviewComment for PR #%v, review ID %v: %v",
-				pullRequestNumber, review.Id, err)
+				pullRequestNumber, review.ID, err)
 		}
 
 		return nil
@@ -795,7 +795,7 @@ func (d Downloader) downloadReviewComments(ctx context.Context, repositoryOwner,
 	}
 
 	variables := map[string]interface{}{
-		"id": githubv4.ID(review.Id),
+		"id": githubv4.ID(review.ID),
 
 		"pullRequestReviewCommentsPage":   githubv4.Int(pullRequestReviewCommentsPage),
 		"pullRequestReviewCommentsCursor": (*githubv4.String)(nil),
@@ -820,7 +820,7 @@ func (d Downloader) downloadReviewComments(ctx context.Context, repositoryOwner,
 		if err != nil {
 			return fmt.Errorf(
 				"failed to query PR review comments for PR #%v, review ID %v: %v",
-				pullRequestNumber, review.Id, err)
+				pullRequestNumber, review.ID, err)
 		}
 
 		for _, comment := range q.Node.PullRequestReview.Comments.Nodes {
