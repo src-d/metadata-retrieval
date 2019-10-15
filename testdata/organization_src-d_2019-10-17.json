@@ -1,12 +1,12 @@
 {
-	"organizationTests": [
+	"OrganizationTestOracles": [
 		{
 			"org": "src-d",
 			"version": 0,
 			"url": "https://github.com/src-d",
 			"createdAt": "2015-10-14 17:13:24 +0000 UTC",
 			"publicRepos": 145,
-			"totalPrivateRepos": 41,
+			"totalPrivateRepos": 42,
 			"numOfUsers": 54
 		}
 	]

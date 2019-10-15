@@ -28,7 +28,7 @@ jobs:
       name: "Integration tests"
       os: osx
       script:
-        - make test-coverage codecov
+        - make test-coverage
     #- stage: test
     #  name: "Integration tests"
     #  os: windows

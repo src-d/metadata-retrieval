@@ -53,6 +53,8 @@ func main() {
 		Transport: client.Transport,
 		LogRequest: func(req *http.Request) {
 			query = cloneRequest(req)
+			// https://stackoverflow.com/a/19006050/869151
+			req.Close = true
 		},
 		LogResponse: func(resp *http.Response) {
 			// TODO(@kyrcha): also record other types of responses
@@ -74,9 +76,9 @@ func main() {
 	log.Infof("End recording a repo")
 
 	// create a struct with the oracle
-	repoOracles := testutils.Tests{
-		RepositoryTests: []testutils.RepositoryTest{
-			testutils.RepositoryTest{
+	repoOracles := testutils.TestOracles{
+		RepositoryTestOracles: []testutils.RepositoryTestOracle{
+			testutils.RepositoryTestOracle{
 				Owner:                 org,
 				Repository:            repo,
 				Version:               0,
@@ -119,9 +121,9 @@ func main() {
 	log.Infof("End recording an org")
 
 	// create a struct with the oracle
-	orgOracles := testutils.Tests{
-		OrganizationsTests: []testutils.OrganizationTest{
-			testutils.OrganizationTest{
+	orgOracles := testutils.TestOracles{
+		OrganizationTestOracles: []testutils.OrganizationTestOracle{
+			testutils.OrganizationTestOracle{
 				Org:               org,
 				Version:           0,
 				URL:               memory.Organization.URL,
@@ -180,7 +182,7 @@ func encodeAndStore(filename string, reqResp map[string]string) error {
 	return gob.NewEncoder(zw).Encode(reqResp)
 }
 
-func encodeAndStoreTests(filename string, tests testutils.Tests) error {
+func encodeAndStoreTests(filename string, tests testutils.TestOracles) error {
 	filepath := filepath.Join("testdata", filename)
 	data, err := json.MarshalIndent(tests, "", "\t")
 	if err != nil {

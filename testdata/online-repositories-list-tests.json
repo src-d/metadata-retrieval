@@ -1,5 +1,5 @@
 {
-    "repositoryTests" :
+    "repositoryTestOracles" :
     [
         {
             "owner": "git-fixtures",
@@ -34,7 +34,7 @@
             "repository": "small-several-contributors-with-prs"
         }
     ],
-    "organizationTests" :
+    "organizationTestOracles" :
     [
         {
             "org": "git-fixtures"
