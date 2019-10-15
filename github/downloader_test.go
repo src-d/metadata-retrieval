@@ -201,7 +201,7 @@ func testRepo(t *testing.T, oracle testutils.RepositoryTest, d *Downloader, stor
 	require.Nil(err)
 	// Sample some properties that will not change, no topics available in git-fixtures
 	require.Equal(oracle.URL, storer.Repository.URL)
-	require.Equal(oracle.CreatedAt, storer.Repository.CreatedAt.String())
+	require.Equal(oracle.CreatedAt, storer.Repository.CreatedAt.UTC().String())
 	require.Equal(oracle.IsPrivate, storer.Repository.IsPrivate)
 	require.Equal(oracle.IsArchived, storer.Repository.IsArchived)
 	require.Equal(oracle.HasWiki, storer.Repository.HasWikiEnabled)
@@ -247,7 +247,7 @@ func testOrg(t *testing.T, oracle testutils.OrganizationTest, d *Downloader, sto
 	// Sample some properties that will not change, no topics available in git-fixtures
 	require.Equal(oracle.Org, storer.Organization.Login)
 	require.Equal(oracle.URL, storer.Organization.URL)
-	require.Equal(oracle.CreatedAt, storer.Organization.CreatedAt.String())
+	require.Equal(oracle.CreatedAt, storer.Organization.CreatedAt.UTC().String())
 	require.Equal(oracle.PublicRepos, storer.Organization.PublicRepos.TotalCount)
 	require.Equal(oracle.TotalPrivateRepos, storer.Organization.TotalPrivateRepos.TotalCount)
 	require.Len(storer.Users, oracle.NumOfUsers)
@@ -331,7 +331,7 @@ func testOrgWithDB(t *testing.T, oracle testutils.OrganizationTest, d *Downloade
 	require.NoError(err, "Error in retrieving users")
 	// Checks
 	require.Equal(oracle.URL, htmlurl)
-	require.Equal(oracle.CreatedAt, createdAt.String())
+	require.Equal(oracle.CreatedAt, createdAt.UTC().String())
 	require.Equal(oracle.PublicRepos, numOfPublicRepos)
 	require.Equal(oracle.TotalPrivateRepos, numOfPrivateRepos)
 	require.Equal(oracle.NumOfUsers, numOfUsers)
@@ -428,7 +428,7 @@ func checkRepo(require *require.Assertions, db *sql.DB, oracle testutils.Reposit
 	err := db.QueryRow("select htmlurl, created_at, private, archived, has_wiki, topics from repositories where owner_login = $1 and name = $2", oracle.Owner, oracle.Repository).Scan(&htmlurl, &createdAt, &private, &archived, &hasWiki, pq.Array(&topics))
 	require.NoError(err, "Error in retrieving repo")
 	require.Equal(oracle.URL, htmlurl)
-	require.Equal(oracle.CreatedAt, createdAt.String())
+	require.Equal(oracle.CreatedAt, createdAt.UTC().String())
 	require.Equal(oracle.IsPrivate, private)
 	require.Equal(oracle.IsArchived, archived)
 	require.Equal(oracle.HasWiki, hasWiki)
