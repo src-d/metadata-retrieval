@@ -29,8 +29,12 @@ jobs:
       os: osx
       script:
         - make test-coverage codecov
-    - stage: test
-      name: "Integration tests"
-      os: windows
-      script:
-        - run-integration-tests.bat
+    #- stage: test
+    #  name: "Integration tests"
+    #  os: windows
+    #  script:
+    #    - run-integration-tests.bat
+    # https://docs.travis-ci.com/user/best-practices-security#steps-travis-ci-takes-to-secure-your-data
+    # Remove because: The beta Windows support does not obfuscate secure environment variables leaked 
+    # into the build log. Please keep reading the next section, on how to avoid leaking secrets to build 
+    # logs
