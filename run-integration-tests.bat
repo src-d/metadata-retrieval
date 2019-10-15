@@ -1,0 +1,3 @@
+:: we can't use makefile for windows because it depends on CI makefile which depends on shell
+
+go test -coverpkg=./... -coverprofile=coverage.out ./...

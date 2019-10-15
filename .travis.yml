@@ -29,3 +29,8 @@ jobs:
       os: osx
       script:
         - make test-coverage codecov
+    - stage: test
+      name: "Integration tests"
+      os: windows
+      script:
+        - run-integration-tests.bat
