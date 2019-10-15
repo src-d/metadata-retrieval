@@ -10,8 +10,7 @@ import (
 )
 
 func setLogTransport(client *http.Client, logger log.Logger) {
-	t := &logTransport{client.Transport, logger}
-	client.Transport = t
+	client.Transport = &logTransport{client.Transport, logger}
 }
 
 type logTransport struct {

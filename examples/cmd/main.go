@@ -270,6 +270,9 @@ func (c *DownloaderCmd) buildDownloadersPool(logger log.Logger, db *sql.DB) (*Do
 			setLogTransport(client, logger)
 		}
 
+		github.SetRateLimitTransport(client, logger)
+		github.SetRetryTransport(client)
+
 		var d *github.Downloader
 		var err error
 		if db == nil {
