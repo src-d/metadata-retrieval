@@ -33,14 +33,15 @@ import (
 )
 
 const (
-	orgPrefix        = "../testdata/organization_src-d_2019-10-15"
-	repoPrefix       = "../testdata/repository_src-d_gitbase_2019-10-15"
-	orgRecFile       = orgPrefix + ".gob.gz"
-	repoRecFile      = repoPrefix + ".gob.gz"
-	offlineRepoTests = orgPrefix + ".json"
-	offlineOrgTests  = repoPrefix + ".json"
-	onlineRepoTests  = "../testdata/online-repository-tests.json"
-	onlineOrgTests   = "../testdata/online-organization-tests.json"
+	orgPrefix            = "../testdata/organization_src-d_2019-10-15"
+	repoPrefix           = "../testdata/repository_src-d_gitbase_2019-10-15"
+	orgRecFile           = orgPrefix + ".gob.gz"
+	repoRecFile          = repoPrefix + ".gob.gz"
+	offlineRepoTests     = orgPrefix + ".json"
+	offlineOrgTests      = repoPrefix + ".json"
+	onlineRepoTests      = "../testdata/online-repository-tests.json"
+	onlineOrgTests       = "../testdata/online-organization-tests.json"
+	onlineReposListTests = "../testdata/online-repositories-list-tests.json"
 )
 
 // loads requests-response data from a gob file
