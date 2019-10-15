@@ -1,25 +1,20 @@
 package github
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"io/ioutil"
 	"net/http"
 	"time"
 
 	"gopkg.in/src-d/go-log.v1"
 )
 
-// errUnretriable wraps an error to stop retry
-type errUnretriable struct {
-	Err error
+// SetRetryTransport wraps the passed client.Transport with a RetryTransport
+func SetRetryTransport(client *http.Client) {
+	client.Transport = &retryTransport{client.Transport}
 }
 
-func (e *errUnretriable) Error() string {
-	return e.Err.Error()
-}
-
+// retryTransport retries a http.Request if it fails when processing, or if
+// its http.Response has StatusCode in 5xx range (server errors)
 type retryTransport struct {
 	T http.RoundTripper
 }
@@ -29,28 +24,15 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var err error
 	retry(func() error {
 		r, err = t.T.RoundTrip(req)
-		if err != nil {
-			if err == context.Canceled {
-				return &errUnretriable{Err: err}
-			}
-
-			return err
-		}
-
-		if r.StatusCode == http.StatusOK {
+		if err == context.Canceled {
 			return nil
 		}
 
-		body, _ := ioutil.ReadAll(r.Body)
-
-		// Restore the io.ReadCloser
-		r.Body = ioutil.NopCloser(bytes.NewBuffer(body))
-
-		err = fmt.Errorf("non-200 OK status code: %v body: %q", r.Status, body)
-		if r.StatusCode > 500 {
+		if err != nil || r.StatusCode >= 500 {
 			return err
 		}
-		return &errUnretriable{Err: err}
+
+		return nil
 	})
 
 	return r, err
@@ -62,21 +44,19 @@ const (
 	truncate = 10 * time.Second
 )
 
-func retry(f func() error) error {
+func retry(f func() error) {
 	d := delay
 	var i uint
 
+	var err error
 	for ; ; i++ {
-		err := f()
+		err = f()
 		if err == nil {
-			return nil
-		}
-		if errU, ok := err.(*errUnretriable); ok {
-			return errU.Err
+			return
 		}
 
 		if i == retries {
-			return err
+			break
 		}
 
 		log.Errorf(err, "retrying in %v", d)
@@ -87,4 +67,6 @@ func retry(f func() error) error {
 			d = truncate
 		}
 	}
+
+	log.Errorf(err, "retried %v times", retries)
 }
