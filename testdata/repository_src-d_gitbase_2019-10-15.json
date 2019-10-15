@@ -1,0 +1,27 @@
+{
+	"repositoryTests": [
+		{
+			"owner": "src-d",
+			"repository": "gitbase",
+			"version": 0,
+			"url": "https://github.com/src-d/gitbase",
+			"topics": [
+				"sql",
+				"git",
+				"sql-interface",
+				"golang",
+				"ast"
+			],
+			"createdAt": "2016-09-19 10:14:13 +0000 UTC",
+			"isPrivate": false,
+			"isArchived": false,
+			"hasWiki": false,
+			"numOfPrs": 549,
+			"numOfPrComments": 746,
+			"numOfIssues": 401,
+			"numOfIssueComments": 973,
+			"numOfPRReviews": 465,
+			"numOfPRReviewComments": 549
+		}
+	]
+}

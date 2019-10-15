@@ -32,6 +32,6 @@ type OrganizationTest struct {
 
 // Tests struct to hold the tests from json files
 type Tests struct {
-	RepositoryTests    []RepositoryTest   `json:"repositoryTests"`
-	OrganizationsTests []OrganizationTest `json:"organizationTests"`
+	RepositoryTests    []RepositoryTest   `json:"repositoryTests,omitempty"`
+	OrganizationsTests []OrganizationTest `json:"organizationTests,omitempty"`
 }

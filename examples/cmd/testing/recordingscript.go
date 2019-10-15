@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/gob"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/src-d/metadata-retrieval/github"
+	"github.com/src-d/metadata-retrieval/testutils"
 
 	"github.com/motemen/go-loghttp"
 	"golang.org/x/oauth2"
@@ -60,7 +62,8 @@ func main() {
 		},
 	}
 
-	downloader, err := github.NewStdoutDownloader(client)
+	memory := new(testutils.Memory)
+	downloader, err := github.NewMemoryDownloader(client, memory)
 	if err != nil {
 		panic(err)
 	}
@@ -70,10 +73,39 @@ func main() {
 	downloader.DownloadRepository(ctx, org, repo, 0)
 	log.Infof("End recording a repo")
 
+	// create a struct with the oracle
+	repoOracles := testutils.Tests{
+		RepositoryTests: []testutils.RepositoryTest{
+			testutils.RepositoryTest{
+				Owner:                 org,
+				Repository:            repo,
+				Version:               0,
+				URL:                   memory.Repository.URL,
+				Topics:                memory.Topics,
+				CreatedAt:             memory.Repository.CreatedAt.UTC().String(),
+				IsPrivate:             memory.Repository.IsPrivate,
+				IsArchived:            memory.Repository.IsArchived,
+				HasWiki:               memory.Repository.HasWikiEnabled,
+				NumOfPRs:              len(memory.PRs),
+				NumOfPRComments:       len(memory.PRComments),
+				NumOfIssues:           len(memory.Issues),
+				NumOfIssueComments:    len(memory.IssueComments),
+				NumOfPRReviews:        len(memory.PRReviews),
+				NumOfPRReviewComments: len(memory.PRReviewComments),
+			},
+		},
+	}
+
 	// store the results
 	dt := time.Now()
-	filename := fmt.Sprintf("repository_%s_%s_%s.gob.gz", org, repo, dt.Format("2006-01-02"))
-	err = encodeAndStore(filename, reqResp)
+	filename := fmt.Sprintf("repository_%s_%s_%s", org, repo, dt.Format("2006-01-02"))
+
+	err = encodeAndStore(filename+".gob.gz", reqResp)
+	if err != nil {
+		panic(err)
+	}
+
+	err = encodeAndStoreTests(filename+".json", repoOracles)
 	if err != nil {
 		panic(err)
 	}
@@ -86,13 +118,32 @@ func main() {
 	downloader.DownloadOrganization(ctx, org, 0)
 	log.Infof("End recording an org")
 
+	// create a struct with the oracle
+	orgOracles := testutils.Tests{
+		OrganizationsTests: []testutils.OrganizationTest{
+			testutils.OrganizationTest{
+				Org:               org,
+				Version:           0,
+				URL:               memory.Organization.URL,
+				CreatedAt:         memory.Organization.CreatedAt.UTC().String(),
+				PublicRepos:       memory.Organization.PublicRepos.TotalCount,
+				TotalPrivateRepos: memory.Organization.TotalPrivateRepos.TotalCount,
+				NumOfUsers:        len(memory.Users),
+			},
+		},
+	}
+
+	filename = fmt.Sprintf("organization_%s_%s", org, dt.Format("2006-01-02"))
+
 	// store the results
-	filename = fmt.Sprintf("organization_%s_%s.gob.gz", org, dt.Format("2006-01-02"))
-	err = encodeAndStore(filename, reqResp)
+	err = encodeAndStore(filename+".gob.gz", reqResp)
 	if err != nil {
 		panic(err)
 	}
-
+	err = encodeAndStoreTests(filename+".json", orgOracles)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func cloneRequest(req *http.Request) string {
@@ -127,4 +178,17 @@ func encodeAndStore(filename string, reqResp map[string]string) error {
 	zw := gzip.NewWriter(encodeFile)
 	defer zw.Close()
 	return gob.NewEncoder(zw).Encode(reqResp)
+}
+
+func encodeAndStoreTests(filename string, tests testutils.Tests) error {
+	filepath := filepath.Join("testdata", filename)
+	data, err := json.MarshalIndent(tests, "", "\t")
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(filepath, data, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
 }

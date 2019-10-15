@@ -8,6 +8,7 @@ import (
 
 	"github.com/src-d/metadata-retrieval/github/graphql"
 	"github.com/src-d/metadata-retrieval/github/store"
+	"github.com/src-d/metadata-retrieval/testutils"
 	"github.com/src-d/metadata-retrieval/utils/ctxlog"
 
 	"github.com/shurcooL/githubv4"
@@ -86,6 +87,20 @@ func NewStdoutDownloader(httpClient *http.Client) (*Downloader, error) {
 
 	return &Downloader{
 		storer: &store.Stdout{},
+		client: githubv4.NewClient(httpClient),
+	}, nil
+}
+
+// NewMemoryDownloader creates a new Downloader that stores GitHub data in memory.
+// The HTTP client is expected to have the proper authentication setup
+func NewMemoryDownloader(httpClient *http.Client, memory *testutils.Memory) (*Downloader, error) {
+	// TODO: is the ghsync rate limited client needed?
+
+	t := &retryTransport{httpClient.Transport}
+	httpClient.Transport = t
+
+	return &Downloader{
+		storer: memory,
 		client: githubv4.NewClient(httpClient),
 	}, nil
 }
