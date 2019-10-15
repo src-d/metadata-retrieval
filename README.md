@@ -7,7 +7,8 @@ The example cmd can print to sdtout or save to a postgres DB. To help even furth
 To use, create a personal GitHub token with the scopes **read:org**, **repo**.
 
 ```shell
-export GITHUB_TOKEN=xxxx
+# you can define one or more access tokens (comma separated)
+export GITHUB_TOKENS=<xxx>,<yyy>
 
 # Info for individual repositories
 go run examples/cmd/*.go repo --version 0 --owner=src-d --name=metadata-retrieval
@@ -365,7 +366,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 Migrations reside in `database/migrations` and they need to be packed with go-bindata before being usable.
 To repack migrations you can use:
 
-```
+```shell
 make migration
 ```
 
@@ -373,20 +374,26 @@ make migration
 
 To test, run:
 
-```
-GITHUB_TOKEN=<xxx> go test ./...
+```shell
+# set your github personal access token (scopes 'read:org', 'repo')
+export GITHUB_TOKEN=<xxx>
+
+# start the database if not already running
+export POSTGRES_USER=user
+export POSTGRES_PASSWORD=password
+export POSTGRES_DB=ghsync
+docker-compose up -d
+
+# run the tests
+export PSQL_USER=${POSTGRES_USER}
+export PSQL_PWD=${POSTGRES_PASSWORD}
+export PSQL_DB=${POSTGRES_DB}
+go test ./...
 ```
 
-and 
+and for coverage information on all the packages, run:
 
-```
-GITHUB_TOKEN=<xxx> go test -coverpkg=./... -coverprofile=coverage.out ./...
-```
-
-for coverage information on all the packages which can be seen with:
-
-```
+```shell
+go test -coverpkg=./... -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 ```
-
-Where `GITHUB_TOKEN` is a personal access token (scopes **read:org**, **repo**).
