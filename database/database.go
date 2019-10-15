@@ -22,5 +22,11 @@ func Migrate(databaseURL string) error {
 	if err != nil {
 		return err
 	}
-	return m.Up()
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+
+	_, err = m.Close()
+	return err
 }

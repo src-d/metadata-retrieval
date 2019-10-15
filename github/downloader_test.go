@@ -25,7 +25,6 @@ import (
 	"github.com/src-d/metadata-retrieval/testutils"
 
 	"github.com/cenkalti/backoff"
-	"github.com/golang-migrate/migrate/v4"
 	"github.com/lib/pq"
 	"github.com/shurcooL/githubv4"
 	"github.com/stretchr/testify/require"
@@ -106,7 +105,7 @@ func getDB(t *testing.T) (db *sql.DB) {
 	if err = db.Ping(); err != nil {
 		require.Nil(t, err, "DB connection is not working")
 	}
-	if err = database.Migrate(DBURL); err != nil && err != migrate.ErrNoChange {
+	if err = database.Migrate(DBURL); err != nil {
 		require.Nil(t, err, "Cannot migrate the DB")
 	}
 	return db

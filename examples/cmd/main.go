@@ -7,7 +7,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/golang-migrate/migrate/v4"
 	"github.com/src-d/metadata-retrieval/database"
 	"github.com/src-d/metadata-retrieval/github"
 	"golang.org/x/oauth2"
@@ -207,7 +206,7 @@ func (c *DownloaderCmd) ExecuteBody(logger log.Logger, fn bodyFunc) error {
 			return err
 		}
 
-		if err = database.Migrate(c.DB); err != nil && err != migrate.ErrNoChange {
+		if err = database.Migrate(c.DB); err != nil {
 			return err
 		}
 	}
