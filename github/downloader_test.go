@@ -97,8 +97,8 @@ func isOSXOnTravis() bool {
 // Testing connection documentation, docker-compose and Migrate method
 func getDB(t *testing.T) (db *sql.DB) {
 	require.NotEmpty(t, os.Getenv("PSQL_USER"), "PSQL_USER env var not set")
-	require.NotEmpty(t, os.Getenv("PSQL_PWD"), "PSQL_PWD env var not set")
 	require.NotEmpty(t, os.Getenv("PSQL_DB"), "PSQL_DB env var not set")
+	// PSQL_PWD is not required in case someone wants to run the tests in a default local config
 	DBURL := fmt.Sprintf("postgres://%s:%s@localhost:5432/%s?sslmode=disable", os.Getenv("PSQL_USER"), os.Getenv("PSQL_PWD"), os.Getenv("PSQL_DB"))
 	err := backoff.Retry(func() error {
 		var err error
