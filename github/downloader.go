@@ -168,6 +168,52 @@ func (d Downloader) DownloadRepository(ctx context.Context, owner string, name s
 	return nil
 }
 
+func (d Downloader) ListRepositories(ctx context.Context, name string, noForks bool) ([]string, error) {
+	repos := []string{}
+
+	hasNextPage := true
+
+	variables := map[string]interface{}{
+		"login": githubv4.String(name),
+
+		"repositoriesPage":   githubv4.Int(100),
+		"repositoriesCursor": (*githubv4.String)(nil),
+	}
+
+	if noForks {
+		variables["isFork"] = githubv4.Boolean(false)
+	} else {
+		variables["isFork"] = (*githubv4.Boolean)(nil)
+	}
+
+	for hasNextPage {
+		var q struct {
+			Organization struct {
+				Repositories struct {
+					PageInfo graphql.PageInfo
+					Nodes    []struct {
+						Name string
+					}
+				} `graphql:"repositories(first:$repositoriesPage, after: $repositoriesCursor, isFork: $isFork)"`
+			} `graphql:"organization(login: $login)"`
+		}
+
+		err := d.client.Query(ctx, &q, variables)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query organization %v repositories: %v", name, err)
+		}
+
+		for _, node := range q.Organization.Repositories.Nodes {
+			repos = append(repos, node.Name)
+		}
+
+		hasNextPage = q.Organization.Repositories.PageInfo.HasNextPage
+		variables["repositoriesCursor"] = githubv4.String(q.Organization.Repositories.PageInfo.EndCursor)
+	}
+
+	return repos, nil
+}
+
 // RateRemaining returns the remaining rate limit for the v4 GitHub API
 func (d Downloader) RateRemaining(ctx context.Context) (int, error) {
 	var q struct {
