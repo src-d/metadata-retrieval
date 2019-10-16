@@ -282,7 +282,7 @@ func (d Downloader) downloadConnection(
 		variables[t.Page()] = getPerPage(res.GetTotalCount(), count, t.PageSize, limit)
 		variables[t.Cursor()] = githubv4.String(res.GetPageInfo().EndCursor)
 
-		if t.Log && count%int(t.PageSize) == 0 {
+		if t.Log {
 			logger.Infof("%d/%d %s downloaded", count, res.GetTotalCount(), t.Name)
 		}
 
