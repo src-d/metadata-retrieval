@@ -8,6 +8,14 @@ type Connection struct {
 	TotalCount int
 }
 
+func (c Connection) GetPageInfo() PageInfo {
+	return c.PageInfo
+}
+
+func (c Connection) GetTotalCount() int {
+	return c.TotalCount
+}
+
 // PageInfo represents https://developer.github.com/v4/object/pageinfo/
 type PageInfo struct {
 	HasNextPage bool
@@ -49,6 +57,8 @@ type OrganizationMemberConnection struct {
 	Connection
 	Nodes []UserExtended
 } // `graphql:"membersWithRole(first: $membersWithRolePage, after: $membersWithRoleCursor)"`
+
+func (c OrganizationMemberConnection) Len() int { return len(c.Nodes) }
 
 // UserExtended is the same type as User, but requesting more fields.
 // Represents https://developer.github.com/v4/object/user/
@@ -162,16 +172,22 @@ type RepositoryTopicsConnection struct {
 	}
 } //`graphql:"repositoryTopics(first: $repositoryTopicsPage, after: $repositoryTopicsCursor)"`
 
+func (c RepositoryTopicsConnection) Len() int { return len(c.Nodes) }
+
 // IssueConnection represents https://developer.github.com/v4/object/issueconnection/
 type IssueConnection struct {
 	Connection
 	Nodes []Issue
 } //`graphql:"issues(first: $issuesPage, after: $issuesCursor)"`
 
+func (c IssueConnection) Len() int { return len(c.Nodes) }
+
 type IssueCommentsConnection struct {
 	Connection
 	Nodes []IssueComment
 } // `graphql:"comments(first: $issueCommentsPage, after: $issueCommentsCursor)"`
+
+func (c IssueCommentsConnection) Len() int { return len(c.Nodes) }
 
 // Issue represents https://developer.github.com/v4/object/issue/
 type Issue struct {
@@ -228,6 +244,8 @@ type UserConnection struct {
 	Nodes []User
 } //`graphql:"assignees(first: $assigneesPage, after: $assigneesCursor)"`
 
+func (c UserConnection) Len() int { return len(c.Nodes) }
+
 // Label represents https://developer.github.com/v4/object/label/
 type Label struct {
 	Name string
@@ -238,6 +256,8 @@ type LabelConnection struct {
 	Connection
 	Nodes []Label
 } //`graphql:"labels(first: $labelsPage, after: $labelsCursor)"`
+
+func (c LabelConnection) Len() int { return len(c.Nodes) }
 
 type IssueComment struct {
 	AuthorAssociation string    // author_association text,
@@ -254,6 +274,8 @@ type PullRequestConnection struct {
 	Connection
 	Nodes []PullRequest
 } //`graphql:"pullRequests(first: $pullRequestsPage, after: $pullRequestsCursor)"`
+
+func (c PullRequestConnection) Len() int { return len(c.Nodes) }
 
 type PullRequest struct {
 	PullRequestFields
@@ -326,6 +348,8 @@ type PullRequestReviewConnection struct {
 	Nodes []PullRequestReview
 } // `graphql:"reviews(first: $pullRequestReviewsPage, after: $pullRequestReviewsCursor)"`
 
+func (c PullRequestReviewConnection) Len() int { return len(c.Nodes) }
+
 type PullRequestReview struct {
 	PullRequestReviewFields
 	Comments PullRequestReviewCommentConnection `graphql:"comments(first: $pullRequestReviewCommentsPage, after: $pullRequestReviewCommentsCursor)"`
@@ -350,6 +374,8 @@ type PullRequestReviewCommentConnection struct {
 	Connection
 	Nodes []PullRequestReviewComment
 }
+
+func (c PullRequestReviewCommentConnection) Len() int { return len(c.Nodes) }
 
 type PullRequestReviewComment struct {
 	AuthorAssociation string // author_association text,
