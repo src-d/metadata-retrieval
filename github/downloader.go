@@ -17,21 +17,22 @@ import (
 type connectionType struct {
 	Name     string
 	PageSize githubv4.Int
+	Log      bool
 }
 
 func (c connectionType) Page() string   { return fmt.Sprintf("%sPage", c.Name) }
 func (c connectionType) Cursor() string { return fmt.Sprintf("%sCursor", c.Name) }
 
 var (
-	topicsType                    = connectionType{"repositoryTopics", 10}
-	assigneesType                 = connectionType{"assignees", 2}
-	issuesType                    = connectionType{"issues", 50}
-	issueCommentsType             = connectionType{"issueComments", 10}
-	pullRequestsType              = connectionType{"pullRequests", 50}
-	pullRequestReviewsType        = connectionType{"pullRequestReviews", 5}
-	pullRequestReviewCommentsType = connectionType{"pullRequestReviewComments", 5}
-	labelsType                    = connectionType{"labels", 2}
-	membersWithRole               = connectionType{"membersWithRole", 100}
+	topicsType                    = connectionType{"repositoryTopics", 10, false}
+	assigneesType                 = connectionType{"assignees", 2, false}
+	issuesType                    = connectionType{"issues", 50, true}
+	issueCommentsType             = connectionType{"issueComments", 10, false}
+	pullRequestsType              = connectionType{"pullRequests", 50, true}
+	pullRequestReviewsType        = connectionType{"pullRequestReviews", 5, false}
+	pullRequestReviewCommentsType = connectionType{"pullRequestReviewComments", 5, false}
+	labelsType                    = connectionType{"labels", 2, false}
+	membersWithRole               = connectionType{"membersWithRole", 100, true}
 )
 
 type storer interface {
@@ -260,9 +261,7 @@ func (d Downloader) downloadConnection(
 	process func(Connection) error,
 ) error {
 	logger := ctxlog.Get(ctx)
-	// logging only top-level resources
-	isLoggable := t == issuesType || t == pullRequestsType || t == membersWithRole
-	if isLoggable {
+	if t.Log {
 		logger.Infof("start downloading %s", t.Name)
 		defer logger.Infof("finished downloading %s", t.Name)
 	}
@@ -283,7 +282,7 @@ func (d Downloader) downloadConnection(
 		variables[t.Page()] = getPerPage(res.GetTotalCount(), count, t.PageSize, limit)
 		variables[t.Cursor()] = githubv4.String(res.GetPageInfo().EndCursor)
 
-		if isLoggable && count%int(t.PageSize) == 0 {
+		if t.Log && count%int(t.PageSize) == 0 {
 			logger.Infof("%d/%d %s downloaded", count, res.GetTotalCount(), t.Name)
 		}
 
