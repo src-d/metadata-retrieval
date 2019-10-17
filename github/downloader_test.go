@@ -33,12 +33,12 @@ import (
 )
 
 const (
-	orgPrefix            = "../testdata/organization_src-d_2019-10-15"
-	repoPrefix           = "../testdata/repository_src-d_gitbase_2019-10-15"
+	orgPrefix            = "../testdata/organization_src-d_2019-10-17"
+	repoPrefix           = "../testdata/repository_src-d_gitbase_2019-10-17"
 	orgRecFile           = orgPrefix + ".gob.gz"
 	repoRecFile          = repoPrefix + ".gob.gz"
-	offlineRepoTests     = orgPrefix + ".json"
-	offlineOrgTests      = repoPrefix + ".json"
+	offlineRepoTests     = repoPrefix + ".json"
+	offlineOrgTests      = orgPrefix + ".json"
 	onlineRepoTests      = "../testdata/online-repository-tests.json"
 	onlineOrgTests       = "../testdata/online-organization-tests.json"
 	onlineReposListTests = "../testdata/online-repositories-list-tests.json"
@@ -61,22 +61,22 @@ func loadReqResp(filepath string, reqResp map[string]string) error {
 }
 
 // loads tests from a json file
-func loadTests(filepath string) (testutils.Tests, error) {
+func loadTests(filepath string) (testutils.TestOracles, error) {
 	var (
-		err   error
-		tests testutils.Tests
+		err         error
+		testOracles testutils.TestOracles
 	)
 	jsonFile, err := os.Open(filepath)
 	if err != nil {
-		return tests, fmt.Errorf("Could not open json file: %v", err)
+		return testOracles, fmt.Errorf("Could not open json file: %v", err)
 	}
 	defer jsonFile.Close()
 	byteValue, _ := ioutil.ReadAll(jsonFile)
-	err = json.Unmarshal(byteValue, &tests)
+	err = json.Unmarshal(byteValue, &testOracles)
 	if err != nil {
-		return tests, fmt.Errorf("Could not unmarshal json file: %v", err)
+		return testOracles, fmt.Errorf("Could not unmarshal json file: %v", err)
 	}
-	return tests, nil
+	return testOracles, nil
 }
 
 // checks whether a token exists as an env var, if not it skips the test
@@ -167,17 +167,18 @@ func (suite *DownloaderTestSuite) SetupSuite() {
 func (suite *DownloaderTestSuite) TestOnlineListRepositories() {
 	t := suite.T()
 	checkToken(t)
-	tests, err := loadTests(onlineReposListTests)
+	testOracles, err := loadTests(onlineReposListTests)
 	suite.NoError(err, "Failed to read the testcases")
+	suite.Greater(len(testOracles.RepositoryTestOracles), 0, "Must contain at least one test")
 	downloader, _, err := getDownloader()
 	suite.NoError(err, "Failed to instantiate downloader")
 
 	var expectedRepos []string
-	for _, test := range tests.RepositoryTests {
+	for _, test := range testOracles.RepositoryTestOracles {
 		expectedRepos = append(expectedRepos, test.Repository)
 	}
 
-	test := tests.OrganizationsTests[0]
+	test := testOracles.OrganizationTestOracles[0]
 	repos, err := downloader.ListRepositories(context.TODO(), test.Org, true)
 	suite.NoError(err, "Error while listing repositories")
 
@@ -188,11 +189,12 @@ func (suite *DownloaderTestSuite) TestOnlineListRepositories() {
 func (suite *DownloaderTestSuite) TestOnlineRepositoryDownload() {
 	t := suite.T()
 	checkToken(t)
-	tests, err := loadTests(onlineRepoTests)
+	testOracles, err := loadTests(onlineRepoTests)
 	suite.NoError(err, "Failed to read the testcases")
+	suite.Greater(len(testOracles.RepositoryTestOracles), 0, "Must contain at least one test")
 	downloader, storer, err := getDownloader()
 	suite.NoError(err, "Failed to instantiate downloader")
-	for _, test := range tests.RepositoryTests {
+	for _, test := range testOracles.RepositoryTestOracles {
 		test := test // pinned, see scopelint for more info
 		t.Run(fmt.Sprintf("Repo: %s/%s", test.Owner, test.Repository), func(t *testing.T) {
 			testRepo(t, test, downloader, storer, false)
@@ -200,7 +202,7 @@ func (suite *DownloaderTestSuite) TestOnlineRepositoryDownload() {
 	}
 }
 
-func testRepo(t *testing.T, oracle testutils.RepositoryTest, d *Downloader, storer *testutils.Memory, strict bool) {
+func testRepo(t *testing.T, oracle testutils.RepositoryTestOracle, d *Downloader, storer *testutils.Memory, strict bool) {
 	err := d.DownloadRepository(context.TODO(), oracle.Owner, oracle.Repository, oracle.Version)
 	require := require.New(t) // Make a new require object for the specified test, so no need to pass it around
 	require.Nil(err)
@@ -211,21 +213,22 @@ func testRepo(t *testing.T, oracle testutils.RepositoryTest, d *Downloader, stor
 	require.Equal(oracle.IsArchived, storer.Repository.IsArchived)
 	require.Equal(oracle.HasWiki, storer.Repository.HasWikiEnabled)
 	require.ElementsMatch(oracle.Topics, storer.Topics)
-	numOfPRReviews, numOfPRReviewComments := storer.CountPRReviewsAndReviewComments()
 	if strict {
 		require.Len(storer.PRs, oracle.NumOfPRs)
 		require.Len(storer.PRComments, oracle.NumOfPRComments)
 		require.Len(storer.Issues, oracle.NumOfIssues)
 		require.Len(storer.IssueComments, oracle.NumOfIssueComments)
-		require.Equal(oracle.NumOfPRReviews, numOfPRReviews)
-		require.Equal(oracle.NumOfPRReviewComments, numOfPRReviewComments)
+		require.Len(storer.PRComments, oracle.NumOfPRComments)
+		require.Len(storer.PRReviews, oracle.NumOfPRReviews)
+		require.Len(storer.PRReviewComments, oracle.NumOfPRReviewComments)
 	} else {
 		require.GreaterOrEqual(oracle.NumOfPRs, len(storer.PRs))
 		require.GreaterOrEqual(oracle.NumOfPRComments, len(storer.PRComments))
 		require.GreaterOrEqual(oracle.NumOfIssues, len(storer.Issues))
 		require.GreaterOrEqual(oracle.NumOfIssueComments, len(storer.IssueComments))
-		require.GreaterOrEqual(oracle.NumOfPRReviews, numOfPRReviews)
-		require.GreaterOrEqual(oracle.NumOfPRReviewComments, numOfPRReviewComments)
+		require.GreaterOrEqual(oracle.NumOfPRComments, len(storer.PRComments))
+		require.GreaterOrEqual(oracle.NumOfPRReviews, len(storer.PRReviews))
+		require.GreaterOrEqual(oracle.NumOfPRReviewComments, len(storer.PRReviewComments))
 	}
 }
 
@@ -233,11 +236,12 @@ func testRepo(t *testing.T, oracle testutils.RepositoryTest, d *Downloader, stor
 func (suite *DownloaderTestSuite) TestOnlineOrganizationDownload() {
 	t := suite.T()
 	checkToken(t)
-	tests, err := loadTests(onlineOrgTests)
+	testOracles, err := loadTests(onlineOrgTests)
 	suite.NoError(err, "Failed to read the testcases")
+	suite.Greater(len(testOracles.OrganizationTestOracles), 0, "Must contain at least one test")
 	downloader, storer, err := getDownloader()
 	suite.NoError(err, "Failed to instantiate downloader")
-	for _, test := range tests.OrganizationsTests {
+	for _, test := range testOracles.OrganizationTestOracles {
 		test := test
 		t.Run(fmt.Sprintf("Org: %s", test.Org), func(t *testing.T) {
 			testOrg(t, test, downloader, storer)
@@ -245,7 +249,7 @@ func (suite *DownloaderTestSuite) TestOnlineOrganizationDownload() {
 	}
 }
 
-func testOrg(t *testing.T, oracle testutils.OrganizationTest, d *Downloader, storer *testutils.Memory) {
+func testOrg(t *testing.T, oracle testutils.OrganizationTestOracle, d *Downloader, storer *testutils.Memory) {
 	err := d.DownloadOrganization(context.TODO(), oracle.Org, oracle.Version)
 	require := require.New(t)
 	require.Nil(err, "DownloadOrganization(%s) failed", oracle.Org)
@@ -290,9 +294,11 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownload() {
 	// Not using the NewStdoutDownloader initialization because it overides the transport
 	storer := &testutils.Memory{}
 	downloader := getRoundTripDownloader(reqResp, storer)
-	tests, err := loadTests(offlineOrgTests)
+	testOracles, err := loadTests(offlineOrgTests)
 	suite.NoError(err, "Failed to read the offline tests")
-	for _, test := range tests.OrganizationsTests {
+	suite.Greater(len(testOracles.OrganizationTestOracles), 0, "Must contain at least one test")
+	suite.NoError(err, "Failed to read the offline tests")
+	for _, test := range testOracles.OrganizationTestOracles {
 		test := test
 		t.Run(fmt.Sprintf("Org: %s", test.Org), func(t *testing.T) {
 			testOrg(t, test, downloader, storer)
@@ -307,9 +313,10 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownload() {
 	suite.NoError(loadReqResp(repoRecFile, reqResp), "Failed to read the offline recordings")
 	storer := &testutils.Memory{}
 	downloader := getRoundTripDownloader(reqResp, storer)
-	tests, err := loadTests(offlineRepoTests)
+	testOracles, err := loadTests(offlineRepoTests)
 	suite.NoError(err, "Failed to read the offline tests")
-	for _, test := range tests.RepositoryTests {
+	suite.Greater(len(testOracles.RepositoryTestOracles), 0, "Must contain at least one test")
+	for _, test := range testOracles.RepositoryTestOracles {
 		test := test
 		t.Run(fmt.Sprintf("Repo: %s/%s", test.Owner, test.Repository), func(t *testing.T) {
 			testRepo(t, test, downloader, storer, true)
@@ -317,7 +324,7 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownload() {
 	}
 }
 
-func testOrgWithDB(t *testing.T, oracle testutils.OrganizationTest, d *Downloader, db *sql.DB) {
+func testOrgWithDB(t *testing.T, oracle testutils.OrganizationTestOracle, d *Downloader, db *sql.DB) {
 	err := d.DownloadOrganization(context.TODO(), oracle.Org, oracle.Version)
 	require := require.New(t) // Make a new require object for the specified test, so no need to pass it around
 	require.NoError(err, "Error in downloading")
@@ -346,8 +353,9 @@ func testOrgWithDB(t *testing.T, oracle testutils.OrganizationTest, d *Downloade
 func (suite *DownloaderTestSuite) TestOnlineOrganizationDownloadWithDB() {
 	t := suite.T()
 	checkToken(t)
-	tests, err := loadTests(onlineOrgTests)
+	testOracles, err := loadTests(onlineOrgTests)
 	suite.NoError(err, "Failed to read the online tests")
+	suite.Greater(len(testOracles.OrganizationTestOracles), 0, "Must contain at least one test")
 	downloader, err := NewDownloader(oauth2.NewClient(
 		context.TODO(),
 		oauth2.StaticTokenSource(
@@ -356,7 +364,7 @@ func (suite *DownloaderTestSuite) TestOnlineOrganizationDownloadWithDB() {
 	suite.NoError(err, "Failed to init the downloader")
 	downloader.SetActiveVersion(context.TODO(), 0)
 	suite.downloader = downloader
-	for _, test := range tests.OrganizationsTests {
+	for _, test := range testOracles.OrganizationTestOracles {
 		test := test
 		t.Run(fmt.Sprintf("Org %s with DB", test.Org), func(t *testing.T) {
 			testOrgWithDB(t, test, downloader, suite.db)
@@ -364,7 +372,7 @@ func (suite *DownloaderTestSuite) TestOnlineOrganizationDownloadWithDB() {
 	}
 }
 
-func testRepoWithDB(t *testing.T, oracle testutils.RepositoryTest, d *Downloader, db *sql.DB, strict bool) {
+func testRepoWithDB(t *testing.T, oracle testutils.RepositoryTestOracle, d *Downloader, db *sql.DB, strict bool) {
 	err := d.DownloadRepository(context.TODO(), oracle.Owner, oracle.Repository, oracle.Version)
 	require := require.New(t) // Make a new require object for the specified test, so no need to pass it around
 	require.Nil(err)
@@ -375,7 +383,7 @@ func testRepoWithDB(t *testing.T, oracle testutils.RepositoryTest, d *Downloader
 	checkPRReviewComments(require, db, oracle, strict)
 }
 
-func checkIssues(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest, strict bool) {
+func checkIssues(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
 	var numOfIssues int
 	err := db.QueryRow("select count(*) from issues where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfIssues)
 	require.NoError(err, "Error in retrieving issues")
@@ -387,7 +395,7 @@ func checkIssues(require *require.Assertions, db *sql.DB, oracle testutils.Repos
 
 }
 
-func checkIssuePRComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest, strict bool) {
+func checkIssuePRComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
 	var numOfComments int
 	err := db.QueryRow("select count(*) from issue_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfComments)
 	require.NoError(err, "Error in retrieving issue comments")
@@ -399,7 +407,7 @@ func checkIssuePRComments(require *require.Assertions, db *sql.DB, oracle testut
 	}
 }
 
-func checkPRs(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest, strict bool) {
+func checkPRs(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
 	var numOfPRs int
 	err := db.QueryRow("select count(*) from pull_requests where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRs)
 	require.NoError(err, "Error in retrieving pull requests")
@@ -410,7 +418,7 @@ func checkPRs(require *require.Assertions, db *sql.DB, oracle testutils.Reposito
 	}
 }
 
-func checkPRReviewComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest, strict bool) {
+func checkPRReviewComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
 	var numOfPRReviewComments int
 	err := db.QueryRow("select count(*) from pull_request_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRReviewComments)
 	require.NoError(err, "Error in retrieving pull request comments")
@@ -421,7 +429,7 @@ func checkPRReviewComments(require *require.Assertions, db *sql.DB, oracle testu
 	}
 }
 
-func checkRepo(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTest, strict bool) {
+func checkRepo(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
 	var (
 		htmlurl   string
 		createdAt time.Time
@@ -444,8 +452,9 @@ func checkRepo(require *require.Assertions, db *sql.DB, oracle testutils.Reposit
 func (suite *DownloaderTestSuite) TestOnlineRepositoryDownloadWithDB() {
 	t := suite.T()
 	checkToken(t)
-	tests, err := loadTests(onlineRepoTests)
+	testOracles, err := loadTests(onlineRepoTests)
 	suite.NoError(err, "Failed to read the online tests")
+	suite.Greater(len(testOracles.RepositoryTestOracles), 0, "Must contain at least one test")
 	downloader, err := NewDownloader(oauth2.NewClient(
 		context.TODO(),
 		oauth2.StaticTokenSource(
@@ -454,7 +463,7 @@ func (suite *DownloaderTestSuite) TestOnlineRepositoryDownloadWithDB() {
 	suite.NoError(err, "Failed to init the downloader")
 	downloader.SetActiveVersion(context.TODO(), 0)
 	suite.downloader = downloader
-	for _, test := range tests.RepositoryTests {
+	for _, test := range testOracles.RepositoryTestOracles {
 		test := test
 		t.Run(fmt.Sprintf("Repo %s/%s with DB", test.Owner, test.Repository), func(t *testing.T) {
 			testRepoWithDB(t, test, downloader, suite.db, false)
@@ -474,9 +483,10 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownloadWithDB() {
 	downloader := getRoundTripDownloader(reqResp, storer)
 	downloader.SetActiveVersion(context.TODO(), 0) // Will create the views
 	suite.downloader = downloader
-	tests, err := loadTests(offlineOrgTests)
+	testOracles, err := loadTests(offlineOrgTests)
 	suite.NoError(err, "Failed to read the offline tests")
-	for _, test := range tests.OrganizationsTests {
+	suite.Greater(len(testOracles.OrganizationTestOracles), 0, "Must contain at least one test")
+	for _, test := range testOracles.OrganizationTestOracles {
 		test := test
 		t.Run(fmt.Sprintf("%s", test.Org), func(t *testing.T) {
 			testOrgWithDB(t, test, downloader, suite.db)
@@ -494,9 +504,10 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithDB() {
 	downloader := getRoundTripDownloader(reqResp, storer)
 	downloader.SetActiveVersion(context.TODO(), 0)
 	suite.downloader = downloader
-	tests, err := loadTests(offlineRepoTests)
+	testOracles, err := loadTests(offlineRepoTests)
 	suite.NoError(err, "Failed to read the offline tests")
-	for _, test := range tests.RepositoryTests {
+	suite.Greater(len(testOracles.RepositoryTestOracles), 0, "Must contain at least one test")
+	for _, test := range testOracles.RepositoryTestOracles {
 		test := test
 		t.Run(fmt.Sprintf("%s/%s", test.Owner, test.Repository), func(t *testing.T) {
 			testRepoWithDB(t, test, downloader, suite.db, true)

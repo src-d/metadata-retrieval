@@ -1,7 +1,7 @@
 package testutils
 
-// RepositoryTest struct to hold a test oracle for a repository
-type RepositoryTest struct {
+// RepositoryTestOracle struct to hold a test oracle for a repository
+type RepositoryTestOracle struct {
 	Owner                 string   `json:"owner"`
 	Repository            string   `json:"repository"`
 	Version               int      `json:"version"`
@@ -19,8 +19,8 @@ type RepositoryTest struct {
 	NumOfPRReviewComments int      `json:"numOfPRReviewComments"`
 }
 
-// OrganizationTest struct to hold a test oracle for an organization
-type OrganizationTest struct {
+// OrganizationTestOracle struct to hold a test oracle for an organization
+type OrganizationTestOracle struct {
 	Org               string `json:"org"`
 	Version           int    `json:"version"`
 	URL               string `json:"url"`
@@ -30,8 +30,8 @@ type OrganizationTest struct {
 	NumOfUsers        int    `json:"numOfUsers"`
 }
 
-// Tests struct to hold the tests from json files
-type Tests struct {
-	RepositoryTests    []RepositoryTest   `json:"repositoryTests,omitempty"`
-	OrganizationsTests []OrganizationTest `json:"organizationTests,omitempty"`
+// TestOracles struct to hold the tests from json files
+type TestOracles struct {
+	RepositoryTestOracles   []RepositoryTestOracle   `json:",omitempty"`
+	OrganizationTestOracles []OrganizationTestOracle `json:",omitempty"`
 }

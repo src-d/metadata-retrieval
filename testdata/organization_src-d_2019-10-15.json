@@ -1,5 +1,5 @@
 {
-	"organizationTests": [
+	"organizationTestOracles": [
 		{
 			"org": "src-d",
 			"version": 0,

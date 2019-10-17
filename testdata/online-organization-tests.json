@@ -1,6 +1,5 @@
 {
-    "organizationTests" :
-    [
+    "organizationTestOracles": [
         {
             "org": "git-fixtures",
             "version": 0,
