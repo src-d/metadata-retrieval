@@ -139,6 +139,21 @@ func getDownloader() (*Downloader, *testutils.Memory, error) {
 	return downloader, storer, nil
 }
 
+func getMemoryDownloader() (*Downloader, *testutils.Memory, error) {
+	storer := new(testutils.Memory)
+	downloader, err := NewMemoryDownloader(
+		oauth2.NewClient(
+			context.TODO(),
+			oauth2.StaticTokenSource(
+				&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
+			)),
+		storer)
+	if err != nil {
+		return nil, nil, err
+	}
+	return downloader, storer, nil
+}
+
 // Tests:
 // 1. Online (live) list repositories for git-fixtures org
 // 2. Online (live) download with token for git-fixtures org and memory cache
@@ -192,7 +207,7 @@ func (suite *DownloaderTestSuite) TestOnlineRepositoryDownload() {
 	testOracles, err := loadTests(onlineRepoTests)
 	suite.NoError(err, "Failed to read the testcases")
 	suite.Greater(len(testOracles.RepositoryTestOracles), 0, "Must contain at least one test")
-	downloader, storer, err := getDownloader()
+	downloader, storer, err := getMemoryDownloader()
 	suite.NoError(err, "Failed to instantiate downloader")
 	for _, test := range testOracles.RepositoryTestOracles {
 		test := test // pinned, see scopelint for more info
@@ -239,7 +254,7 @@ func (suite *DownloaderTestSuite) TestOnlineOrganizationDownload() {
 	testOracles, err := loadTests(onlineOrgTests)
 	suite.NoError(err, "Failed to read the testcases")
 	suite.Greater(len(testOracles.OrganizationTestOracles), 0, "Must contain at least one test")
-	downloader, storer, err := getDownloader()
+	downloader, storer, err := getMemoryDownloader()
 	suite.NoError(err, "Failed to instantiate downloader")
 	for _, test := range testOracles.OrganizationTestOracles {
 		test := test
