@@ -18,20 +18,8 @@ type Memory struct {
 	IssueComments    []*graphql.IssueComment
 	PRs              []*graphql.PullRequest
 	PRComments       []*graphql.IssueComment
-	PRReviews        map[int][]*graphql.PullRequestReview
-	PRReviewComments map[int]map[int][]*graphql.PullRequestReviewComment
-}
-
-// CountPRReviewsAndReviewComments returns the number of PR reviews and PR review comments
-func (s *Memory) CountPRReviewsAndReviewComments() (int, int) {
-	var reviewsCounter, commentsCounter int
-	for k, v := range s.PRReviews {
-		reviewsCounter += len(v)
-		for _, vv := range s.PRReviewComments[k] {
-			commentsCounter += len(vv)
-		}
-	}
-	return reviewsCounter, commentsCounter
+	PRReviews        []*graphql.PullRequestReview
+	PRReviewComments []*graphql.PullRequestReviewComment
 }
 
 // SaveOrganization stores an organization in memory,
@@ -62,8 +50,8 @@ func (s *Memory) SaveRepository(ctx context.Context, repository *graphql.Reposit
 	s.IssueComments = make([]*graphql.IssueComment, 0)
 	s.PRs = make([]*graphql.PullRequest, 0)
 	s.PRComments = make([]*graphql.IssueComment, 0)
-	s.PRReviews = make(map[int][]*graphql.PullRequestReview)
-	s.PRReviewComments = make(map[int]map[int][]*graphql.PullRequestReviewComment)
+	s.PRReviews = make([]*graphql.PullRequestReview, 0)
+	s.PRReviewComments = make([]*graphql.PullRequestReviewComment, 0)
 	return nil
 }
 
@@ -85,7 +73,6 @@ func (s *Memory) SaveIssueComment(ctx context.Context, repositoryOwner, reposito
 func (s *Memory) SavePullRequest(ctx context.Context, repositoryOwner, repositoryName string, pr *graphql.PullRequest, assignees []string, labels []string) error {
 	log.Infof("PR data fetched for #%v %s\n", pr.Number, pr.Title)
 	s.PRs = append(s.PRs, pr)
-	s.PRReviewComments[pr.Number] = make(map[int][]*graphql.PullRequestReviewComment)
 	return nil
 }
 
@@ -99,14 +86,14 @@ func (s *Memory) SavePullRequestComment(ctx context.Context, repositoryOwner, re
 // SavePullRequestReview appends a PR review to the PR review list in memory
 func (s *Memory) SavePullRequestReview(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, review *graphql.PullRequestReview) error {
 	log.Infof("\tPR Review data fetched by %s at %v: %q\n", review.Author.Login, review.SubmittedAt, trim(review.Body))
-	s.PRReviews[pullRequestNumber] = append(s.PRReviews[pullRequestNumber], review)
+	s.PRReviews = append(s.PRReviews, review)
 	return nil
 }
 
 // SavePullRequestReviewComment appends a PR review comment to the PR review comments list in memory
 func (s *Memory) SavePullRequestReviewComment(ctx context.Context, repositoryOwner, repositoryName string, pullRequestNumber int, pullRequestReviewID int, comment *graphql.PullRequestReviewComment) error {
 	log.Infof("\t\tPR review comment data fetched by %s at %v: %q\n", comment.Author.Login, comment.CreatedAt, trim(comment.Body))
-	s.PRReviewComments[pullRequestNumber][pullRequestReviewID] = append(s.PRReviewComments[pullRequestNumber][pullRequestReviewID], comment)
+	s.PRReviewComments = append(s.PRReviewComments, comment)
 	return nil
 }
 

@@ -1,5 +1,5 @@
 {
-    "repositoryTests" :
+    "repositoryTestOracles" :
     [
         {
             "owner": "git-fixtures",
