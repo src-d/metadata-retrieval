@@ -1,7 +1,7 @@
 version: '3.2'
 services:
   postgres:
-    image: postgres:10
+    image: postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ghsync}

@@ -86,10 +86,26 @@ func checkToken(t *testing.T) {
 	}
 }
 
-func isOSXOnTravis() bool {
+func checkTokenOnGHA(t *testing.T) {
+	// I cannot read orgs since the scope of the temp token in GHA does not have the rights
+	if os.Getenv("GITHUB_TOKEN") != "" && os.Getenv("GITHUB_ACTION") != "" {
+		t.Skip("GITHUB_TOKEN does not have the rights to read orgs")
+	}
+}
+
+func isOSXOnCICD() bool {
 	// docker service is not supported on osx in Travis: https://docs.travis-ci.com/user/docker/
+	// nor GHA
 	// but maybe in a local osx dev env so we will skip only in travis
-	if runtime.GOOS == "darwin" && os.Getenv("TRAVIS") == "true" {
+	if runtime.GOOS == "darwin" && (os.Getenv("TRAVIS") == "true" || os.Getenv("GITHUB_ACTION") != "") {
+		return true
+	}
+	return false
+}
+
+func isWindowsOnCICD() bool {
+	// Linux Contains on Windows capabilities are not support in GHA nor Travis
+	if runtime.GOOS == "windows" && (os.Getenv("TRAVIS") == "true" || os.Getenv("GITHUB_ACTION") != "") {
 		return true
 	}
 	return false
@@ -113,6 +129,7 @@ func getDB(t *testing.T) (db *sql.DB) {
 	if err = database.Migrate(DBURL); err != nil {
 		require.Nil(t, err, "Cannot migrate the DB")
 	}
+	time.Sleep(10 * time.Second)
 	return db
 }
 
@@ -172,7 +189,7 @@ type DownloaderTestSuite struct {
 }
 
 func (suite *DownloaderTestSuite) SetupSuite() {
-	if !isOSXOnTravis() {
+	if !(isOSXOnCICD() || isWindowsOnCICD()) {
 		suite.db = getDB(suite.T())
 		suite.NotNil(suite.db)
 	}
@@ -251,6 +268,7 @@ func testRepo(t *testing.T, oracle testutils.RepositoryTestOracle, d *Downloader
 func (suite *DownloaderTestSuite) TestOnlineOrganizationDownload() {
 	t := suite.T()
 	checkToken(t)
+	checkTokenOnGHA(t)
 	testOracles, err := loadTests(onlineOrgTests)
 	suite.NoError(err, "Failed to read the testcases")
 	suite.Greater(len(testOracles.OrganizationTestOracles), 0, "Must contain at least one test")
@@ -368,6 +386,7 @@ func testOrgWithDB(t *testing.T, oracle testutils.OrganizationTestOracle, d *Dow
 func (suite *DownloaderTestSuite) TestOnlineOrganizationDownloadWithDB() {
 	t := suite.T()
 	checkToken(t)
+	checkTokenOnGHA(t)
 	testOracles, err := loadTests(onlineOrgTests)
 	suite.NoError(err, "Failed to read the online tests")
 	suite.Greater(len(testOracles.OrganizationTestOracles), 0, "Must contain at least one test")
@@ -531,8 +550,8 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithDB() {
 }
 
 func (suite *DownloaderTestSuite) BeforeTest(suiteName, testName string) {
-	if strings.HasSuffix(testName, "WithDB") && isOSXOnTravis() {
-		suite.T().Skip("Don't test OSX with docker psql")
+	if strings.HasSuffix(testName, "WithDB") && (isOSXOnCICD() || isWindowsOnCICD()) {
+		suite.T().Skip("Don't test OSX/Windows with docker psql on CICD")
 	}
 }
 
