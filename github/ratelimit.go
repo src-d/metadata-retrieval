@@ -71,7 +71,6 @@ func (rt *RateLimitTransport) RoundTrip(req *http.Request) (*http.Response, erro
 
 	if errRateLimit := checkResponseRateLimit(resp, rt.logger, rt.defaultAbuseSleep); errRateLimit != nil {
 		rt.lockedUntil = errRateLimit.when()
-		rt.logger.Warningf("locking transport for %s; %s", errRateLimit.when().Sub(time.Now()), errRateLimit)
 		return resp, errRateLimit
 	}
 
