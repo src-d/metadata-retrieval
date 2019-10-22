@@ -78,20 +78,21 @@ type Ghsync struct {
 	cli.Command `name:"ghsync" short-description:"Mimics ghsync deep command" long-description:"Mimics ghsync deep command"`
 	DownloaderCmd
 
-	Orgs    []string `long:"orgs" env:"GHSYNC_ORGS" env-delim:"," description:"GitHub organizations names comma separated" required:"true"`
-	NoForks bool     `long:"no-forks"  env:"GHSYNC_NO_FORKS" description:"github forked repositories will be skipped"`
+	Orgs    string `long:"orgs" env:"GHSYNC_ORGS" description:"GitHub organizations names comma separated" required:"true"`
+	NoForks bool   `long:"no-forks"  env:"GHSYNC_NO_FORKS" description:"github forked repositories will be skipped"`
 }
 
 func (c *Ghsync) Execute(args []string) error {
 	return c.ExecuteBody(
 		log.DefaultLogger,
 		func(logger log.Logger, dp *DownloadersPool) error {
-			repos, err := c.listAllRepos(logger, dp, c.Orgs)
+			orgs := strings.Split(c.Orgs, ",")
+			repos, err := c.listAllRepos(logger, dp, orgs)
 			if err != nil {
 				return err
 			}
 
-			err = c.downloadOrgs(logger, dp, c.Orgs)
+			err = c.downloadOrgs(logger, dp, orgs)
 			if err != nil {
 				return err
 			}

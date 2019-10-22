@@ -17,7 +17,7 @@ go run examples/cmd/*.go repo --version 0 --owner=src-d --name=metadata-retrieva
 go run examples/cmd/*.go org --version 0 --name=src-d
 
 # Info for organization and all its repositories (similar to ghsync deep)
-go run examples/cmd/*.go ghsync --version 0 --name=src-d --no-forks
+go run examples/cmd/*.go ghsync --version 0 --orgs=src-d,bblfsh --no-forks
 ```
 
 To use a postgres DB:
@@ -41,13 +41,13 @@ You can see the diff between the current DB schema and the ghsync schema here:
 +++ database/migrations/000001_init.up.sql	2019-09-30 12:27:48.783414881 +0100
 @@ -1,267 +1,251 @@
  BEGIN;
- 
+
 -CREATE TABLE organizations (
 -  kallax_id serial NOT NULL PRIMARY KEY,
 +CREATE TABLE IF NOT EXISTS organizations_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
 +  versions integer ARRAY,
- 
+
    avatar_url text,
    billing_email text,
 -  blog text,
@@ -74,7 +74,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 -  type text,
    updated_at timestamptz
  );
- 
+
 -CREATE TABLE users (
 -  kallax_id serial NOT NULL PRIMARY KEY,
 +CREATE INDEX IF NOT EXISTS organizations_versions ON organizations_versioned (versions);
@@ -82,7 +82,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 +CREATE TABLE IF NOT EXISTS users_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
 +  versions integer ARRAY,
- 
+
    avatar_url text,
    bio text,
 -  blog text,
@@ -112,15 +112,15 @@ You can see the diff between the current DB schema and the ghsync schema here:
 -  type text,
    updated_at timestamptz
  );
- 
+
 -CREATE TABLE repositories (
 -  kallax_id serial NOT NULL PRIMARY KEY,
 +CREATE INDEX IF NOT EXISTS users_versions ON users_versioned (versions);
- 
+
 +CREATE TABLE IF NOT EXISTS repositories_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
 +  versions integer ARRAY,
-+  
++
    allow_merge_commit boolean,
    allow_rebase_merge boolean,
    allow_squash_merge boolean,
@@ -174,11 +174,11 @@ You can see the diff between the current DB schema and the ghsync schema here:
    updated_at timestamptz,
    watchers_count bigint
  );
- 
+
 -CREATE TABLE issues (
 -  kallax_id serial NOT NULL PRIMARY KEY,
 +CREATE INDEX IF NOT EXISTS repositories_versions ON repositories_versioned (versions);
- 
+
 -  assignee_id bigint NOT NULL,
 -  assignee_login text NOT NULL,
 -  assignees jsonb NOT NULL,
@@ -210,7 +210,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
    user_id bigint NOT NULL,
    user_login text NOT NULL
  );
- 
+
 -CREATE TABLE issue_comments (
 -  kallax_id serial NOT NULL PRIMARY KEY,
 +CREATE INDEX IF NOT EXISTS issues_versions ON issues_versioned (versions);
@@ -218,7 +218,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 +CREATE TABLE IF NOT EXISTS issue_comments_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
 +  versions integer ARRAY,
- 
+
    author_association text,
    body text,
    created_at timestamptz,
@@ -233,7 +233,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
    user_id bigint NOT NULL,
    user_login text NOT NULL
  );
- 
+
 -CREATE TABLE pull_requests (
 -  kallax_id serial NOT NULL PRIMARY KEY,
 +CREATE INDEX IF NOT EXISTS issue_comments_versions ON issue_comments_versioned (versions);
@@ -241,7 +241,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 +CREATE TABLE IF NOT EXISTS pull_requests_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
 +  versions integer ARRAY,
- 
+
    additions bigint,
 -  assignee_id bigint NOT NULL,
 -  assignee_login text NOT NULL,
@@ -294,7 +294,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
    user_id bigint NOT NULL,
    user_login text NOT NULL
  );
- 
+
 -CREATE TABLE pull_request_reviews (
 -  kallax_id serial NOT NULL PRIMARY KEY,
 +CREATE INDEX IF NOT EXISTS pull_requests_versions ON pull_requests_versioned (versions);
@@ -302,7 +302,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 +CREATE TABLE IF NOT EXISTS pull_request_reviews_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
 +  versions integer ARRAY,
- 
+
    body text,
    commit_id text,
    htmlurl text,
@@ -316,7 +316,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
    user_id bigint NOT NULL,
    user_login text NOT NULL
  );
- 
+
 -CREATE TABLE pull_request_comments (
 -  kallax_id serial NOT NULL PRIMARY KEY,
 +CREATE INDEX IF NOT EXISTS pull_request_reviews_versions ON pull_request_reviews_versioned (versions);
@@ -330,7 +330,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
 +CREATE TABLE IF NOT EXISTS pull_request_comments_versioned (
 +  sum256 character varying(64) PRIMARY KEY,
 +  versions integer ARRAY,
- 
+
    author_association text,
    body text,
    commit_id text,
@@ -353,7 +353,7 @@ You can see the diff between the current DB schema and the ghsync schema here:
    user_id bigint NOT NULL,
    user_login text NOT NULL
  );
- 
+
 +CREATE INDEX IF NOT EXISTS pull_request_comments_versions ON pull_request_comments_versioned (versions);
 +
  COMMIT;
