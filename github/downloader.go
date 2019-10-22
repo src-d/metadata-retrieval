@@ -65,11 +65,6 @@ type Downloader struct {
 // in the given DB. The HTTP client is expected to have the proper
 // authentication setup
 func NewDownloader(httpClient *http.Client, db *sql.DB) (*Downloader, error) {
-	// TODO: is the ghsync rate limited client needed?
-
-	t := &retryTransport{httpClient.Transport}
-	httpClient.Transport = t
-
 	return &Downloader{
 		storer: &store.DB{DB: db},
 		client: githubv4.NewClient(httpClient),
@@ -80,11 +75,6 @@ func NewDownloader(httpClient *http.Client, db *sql.DB) (*Downloader, error) {
 // metadata to stdout. The HTTP client is expected to have the proper
 // authentication setup
 func NewStdoutDownloader(httpClient *http.Client) (*Downloader, error) {
-	// TODO: is the ghsync rate limited client needed?
-
-	t := &retryTransport{httpClient.Transport}
-	httpClient.Transport = t
-
 	return &Downloader{
 		storer: &store.Stdout{},
 		client: githubv4.NewClient(httpClient),
