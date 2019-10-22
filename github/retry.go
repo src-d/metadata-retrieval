@@ -8,83 +8,84 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"gopkg.in/src-d/go-log.v1"
 )
 
-// errUnretriable wraps an error to stop retry
-type errUnretriable struct {
-	Err error
+// SetRetryTransport wraps the passed client.Transport with a RetryTransport
+func SetRetryTransport(client *http.Client) {
+	client.Transport = &retryTransport{client.Transport}
 }
 
-func (e *errUnretriable) Error() string {
-	return e.Err.Error()
-}
-
+// retryTransport retries a http.Request if it fails when processing, or if
+// its http.Response has StatusCode in 5xx range (server errors)
 type retryTransport struct {
 	T http.RoundTripper
 }
 
 func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	var r *http.Response
-	var err error
-	retry(func() error {
-		r, err = t.T.RoundTrip(req)
+	var response *http.Response
+	requestBodyContent, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return nil, fmt.Errorf("could not backup the response before sending it through the retry loop: %s", err)
+	}
+
+	do := func() error {
+		var err error
+		req.Body = ioutil.NopCloser(bytes.NewReader(requestBodyContent))
+		response, err = t.T.RoundTrip(req)
+		if err == context.Canceled {
+			return backoff.Permanent(err)
+		}
+
 		if err != nil {
-			if err == context.Canceled {
-				return &errUnretriable{Err: err}
+			return err
+		}
+
+		if response.StatusCode >= 500 {
+			responseBody, err := readResponseAndRestore(response)
+			if err != nil {
+				return err
 			}
 
-			return err
+			return fmt.Errorf("%s: %s", response.Status, responseBody)
 		}
 
-		if r.StatusCode == http.StatusOK {
-			return nil
-		}
+		return nil
+	}
 
-		body, _ := ioutil.ReadAll(r.Body)
-
-		// Restore the io.ReadCloser
-		r.Body = ioutil.NopCloser(bytes.NewBuffer(body))
-
-		err = fmt.Errorf("non-200 OK status code: %v body: %q", r.Status, body)
-		if r.StatusCode > 500 {
-			return err
-		}
-		return &errUnretriable{Err: err}
-	})
-
-	return r, err
+	return response, retry(do)
 }
 
 const (
-	retries  = 10
-	delay    = 10 * time.Millisecond
-	truncate = 10 * time.Second
+	maxRetries      = 10
+	initialInterval = 10 * time.Millisecond
+	maxInterval     = 10 * time.Second
+	multiplier      = 6 // this multiplier, with these defaults will cause kind of: 10ms, 60ms, 360ms, 2.2s, 10s, 10s ...
 )
 
-func retry(f func() error) error {
-	d := delay
-	var i uint
+// retry retries the passed operation until it returns no err or a permanent one
+// or until it reaches the passed max number of attempts.
+// If returns either the first backoff.PermanentError it gets, or the last obtained error
+// when reaching the max number of attempts
+func retry(operation backoff.Operation) error {
+	retryCount := 0
 
-	for ; ; i++ {
-		err := f()
-		if err == nil {
-			return nil
-		}
-		if errU, ok := err.(*errUnretriable); ok {
-			return errU.Err
-		}
-
-		if i == retries {
-			return err
-		}
-
-		log.Errorf(err, "retrying in %v", d)
-		time.Sleep(d)
-
-		d = d * (1<<i + 1)
-		if d > truncate {
-			d = truncate
-		}
+	onError := func(reason error, nextSlep time.Duration) {
+		retryCount++
+		log.Warningf("retrying in %s; got %s", nextSlep, reason)
 	}
+
+	backoffPolicy := backoff.NewExponentialBackOff()
+	backoffPolicy.InitialInterval = initialInterval
+	backoffPolicy.MaxInterval = maxInterval
+	backoffPolicy.Multiplier = multiplier
+
+	err := backoff.RetryNotify(operation, backoff.WithMaxRetries(backoffPolicy, maxRetries), onError)
+
+	if err != nil {
+		log.Errorf(err, "retry was aborted after %d attempts and %d", retryCount, backoffPolicy.GetElapsedTime())
+	}
+
+	return err
 }
