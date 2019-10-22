@@ -29,7 +29,7 @@ jobs:
       script:
         # only linux supports docker https://docs.travis-ci.com/user/docker/ => tests with docker skipped programmatically ~ OS
         - docker-compose up -d
-        - make test-coverage codecov
+        - make ci-script
 
     - stage: test
       name: "Integration tests"
