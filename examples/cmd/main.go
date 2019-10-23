@@ -10,6 +10,7 @@ import (
 
 	"github.com/src-d/metadata-retrieval/database"
 	"github.com/src-d/metadata-retrieval/github"
+	"github.com/src-d/metadata-retrieval/github/store"
 	"golang.org/x/oauth2"
 	"gopkg.in/src-d/go-cli.v0"
 	"gopkg.in/src-d/go-log.v1"
@@ -233,23 +234,16 @@ type bodyFunc = func(logger log.Logger, downloadersPool *DownloadersPool) error
 
 func (c *DownloaderCmd) ExecuteBody(logger log.Logger, fn bodyFunc) error {
 	ctx := context.Background()
-	var db *sql.DB
+	var storer github.Storer
 	if c.DB == "" {
 		log.Infof("using stdout to save the data")
-		db = nil
+		storer = &store.Stdout{}
 	} else {
-		var err error
-		db, err = sql.Open("postgres", c.DB)
+		db, err := sql.Open("postgres", c.DB)
 		if err != nil {
 			return err
 		}
-
-		defer func() {
-			if err != nil {
-				db.Close()
-				db = nil
-			}
-		}()
+		defer db.Close()
 
 		if err = db.Ping(); err != nil {
 			return err
@@ -258,9 +252,11 @@ func (c *DownloaderCmd) ExecuteBody(logger log.Logger, fn bodyFunc) error {
 		if err = database.Migrate(c.DB); err != nil {
 			return err
 		}
+
+		storer = store.NewDB(db)
 	}
 
-	downloadersPool, err := c.buildDownloadersPool(logger, db)
+	downloadersPool, err := c.buildDownloadersPool(logger, storer)
 	if err != nil {
 		return err
 	}
@@ -309,7 +305,7 @@ func (c *DownloaderCmd) commit(ctx context.Context, dp *DownloadersPool) error {
 	})
 }
 
-func (c *DownloaderCmd) buildDownloadersPool(logger log.Logger, db *sql.DB) (*DownloadersPool, error) {
+func (c *DownloaderCmd) buildDownloadersPool(logger log.Logger, storer github.Storer) (*DownloadersPool, error) {
 	var downloaders []*github.Downloader
 	for _, t := range c.Tokens {
 		client := oauth2.NewClient(context.TODO(), oauth2.StaticTokenSource(
@@ -322,14 +318,7 @@ func (c *DownloaderCmd) buildDownloadersPool(logger log.Logger, db *sql.DB) (*Do
 		github.SetRateLimitTransport(client, logger)
 		github.SetRetryTransport(client)
 
-		var d *github.Downloader
-		var err error
-		if db == nil {
-			d, err = github.NewStdoutDownloader(client)
-		} else {
-			d, err = github.NewDownloader(client, db)
-		}
-
+		d, err := github.NewDownloader(client, storer)
 		if err != nil {
 			return nil, err
 		}

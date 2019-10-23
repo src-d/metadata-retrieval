@@ -17,6 +17,10 @@ type DB struct {
 	v  int
 }
 
+func NewDB(db *sql.DB) *DB {
+	return &DB{DB: db}
+}
+
 func (s *DB) Begin() error {
 	var err error
 	s.tx, err = s.DB.Begin()

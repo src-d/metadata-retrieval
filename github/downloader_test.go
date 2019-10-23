@@ -124,24 +124,9 @@ func (f RoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req), nil
 }
 
-func getDownloader() (*Downloader, *testutils.Memory, error) {
-	downloader, err := NewStdoutDownloader(
-		oauth2.NewClient(
-			context.TODO(),
-			oauth2.StaticTokenSource(
-				&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
-			)))
-	if err != nil {
-		return nil, nil, err
-	}
-	storer := new(testutils.Memory)
-	downloader.storer = storer
-	return downloader, storer, nil
-}
-
 func getMemoryDownloader() (*Downloader, *testutils.Memory, error) {
 	storer := new(testutils.Memory)
-	downloader, err := NewMemoryDownloader(
+	downloader, err := NewDownloader(
 		oauth2.NewClient(
 			context.TODO(),
 			oauth2.StaticTokenSource(
@@ -185,7 +170,7 @@ func (suite *DownloaderTestSuite) TestOnlineListRepositories() {
 	testOracles, err := loadTests(onlineReposListTests)
 	suite.NoError(err, "Failed to read the testcases")
 	suite.Greater(len(testOracles.RepositoryTestOracles), 0, "Must contain at least one test")
-	downloader, _, err := getDownloader()
+	downloader, _, err := getMemoryDownloader()
 	suite.NoError(err, "Failed to instantiate downloader")
 
 	var expectedRepos []string
@@ -277,7 +262,7 @@ func testOrg(t *testing.T, oracle testutils.OrganizationTestOracle, d *Downloade
 	require.Len(storer.Users, oracle.NumOfUsers)
 }
 
-func getRoundTripDownloader(reqResp map[string]string, storer storer) *Downloader {
+func getRoundTripDownloader(reqResp map[string]string, storer Storer) *Downloader {
 	return &Downloader{
 		storer: storer,
 		client: githubv4.NewClient(&http.Client{
@@ -375,9 +360,9 @@ func (suite *DownloaderTestSuite) TestOnlineOrganizationDownloadWithDB() {
 		context.TODO(),
 		oauth2.StaticTokenSource(
 			&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
-		)), suite.db)
+		)), store.NewDB(suite.db))
 	suite.NoError(err, "Failed to init the downloader")
-	downloader.SetActiveVersion(context.TODO(), 0)
+	downloader.SetCurrent(context.TODO(), 0)
 	suite.downloader = downloader
 	for _, test := range testOracles.OrganizationTestOracles {
 		test := test
@@ -474,9 +459,9 @@ func (suite *DownloaderTestSuite) TestOnlineRepositoryDownloadWithDB() {
 		context.TODO(),
 		oauth2.StaticTokenSource(
 			&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
-		)), suite.db)
+		)), store.NewDB(suite.db))
 	suite.NoError(err, "Failed to init the downloader")
-	downloader.SetActiveVersion(context.TODO(), 0)
+	downloader.SetCurrent(context.TODO(), 0)
 	suite.downloader = downloader
 	for _, test := range testOracles.RepositoryTestOracles {
 		test := test
@@ -496,7 +481,7 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownloadWithDB() {
 	// Not using the NewStdoutDownloader initialization because it overides the transport
 	storer := &store.DB{DB: suite.db}
 	downloader := getRoundTripDownloader(reqResp, storer)
-	downloader.SetActiveVersion(context.TODO(), 0) // Will create the views
+	downloader.SetCurrent(context.TODO(), 0) // Will create the views
 	suite.downloader = downloader
 	testOracles, err := loadTests(offlineOrgTests)
 	suite.NoError(err, "Failed to read the offline tests")
@@ -517,7 +502,7 @@ func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithDB() {
 	suite.NoError(loadReqResp(repoRecFile, reqResp), "Failed to read the recordings")
 	storer := &store.DB{DB: suite.db}
 	downloader := getRoundTripDownloader(reqResp, storer)
-	downloader.SetActiveVersion(context.TODO(), 0)
+	downloader.SetCurrent(context.TODO(), 0)
 	suite.downloader = downloader
 	testOracles, err := loadTests(offlineRepoTests)
 	suite.NoError(err, "Failed to read the offline tests")

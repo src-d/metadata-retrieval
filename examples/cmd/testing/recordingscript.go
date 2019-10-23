@@ -65,7 +65,7 @@ func main() {
 	}
 
 	memory := new(testutils.Memory)
-	downloader, err := github.NewMemoryDownloader(client, memory)
+	downloader, err := github.NewDownloader(client, memory)
 	if err != nil {
 		panic(err)
 	}
