@@ -209,7 +209,6 @@ func (s *RateLimitSuite) TestRateLimitConsecutively() {
 	elapsed := time.Now().Sub(t0)
 	s.True(elapsed < 500*time.Millisecond, "request took %s, but it should be almost instant", elapsed)
 	s.NotNil(response)
-	s.Regexp("locking transport for [^;]+; API rate limit exceeded", s.loggerMock.Next())
 	s.Equal("", s.loggerMock.Next())
 
 	response, err = s.transport.RoundTrip(newRequest("/ratelimit_sleep"))
@@ -222,7 +221,6 @@ func (s *RateLimitSuite) TestRateLimitConsecutively() {
 	s.True(elapsed > defaultRateLimitReset, "request took %s, but it should be, at least %s", elapsed, defaultRateLimitReset)
 	s.NotNil(response)
 	s.Contains(s.loggerMock.Next(), "rate limit reached, sleeping until")
-	s.Regexp("locking transport for [^;]+; API rate limit exceeded", s.loggerMock.Next())
 	s.Equal("", s.loggerMock.Next())
 
 	response, err = s.transport.RoundTrip(newRequest("/normal"))
@@ -255,7 +253,6 @@ func (s *RateLimitSuite) TestRateLimitButWaitInsteadOfRetry() {
 	elapsed := time.Now().Sub(t0)
 	s.True(elapsed < 500*time.Millisecond, "request took %s, but it should be almost instant", elapsed)
 	s.NotNil(response)
-	s.Regexp("locking transport for [^;]+; API rate limit exceeded", s.loggerMock.Next())
 	s.Equal("", s.loggerMock.Next())
 
 	// The next Request is going to wait for more time than the previous RateLimit, so it should not be blocked by RateLimitTransport
@@ -284,7 +281,6 @@ func (s *RateLimitSuite) TestAbuse() {
 	elapsed := time.Now().Sub(t0)
 	s.True(elapsed < 500*time.Millisecond, "request took %s, but it should be almost instant", elapsed)
 	s.NotNil(response)
-	s.Regexp("locking transport for [^;]+; abuse detection", s.loggerMock.Next())
 	s.Equal("", s.loggerMock.Next())
 
 	response, err = s.transport.RoundTrip(newRequest("/normal"))
@@ -309,7 +305,6 @@ func (s *RateLimitSuite) TestAbuseWhithoutHeadersButWithProperBody() {
 	s.True(elapsed < 500*time.Millisecond, "request took %s, but it should be almost instant", elapsed)
 	s.NotNil(response)
 	s.Contains(s.loggerMock.Next(), "error reading")
-	s.Regexp("locking transport for [^;]+; abuse detection", s.loggerMock.Next())
 	s.Equal("", s.loggerMock.Next())
 
 	response, err = s.transport.RoundTrip(newRequest("/normal"))
