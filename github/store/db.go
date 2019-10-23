@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/src-d/metadata-retrieval/github/graphql"
 
@@ -61,184 +62,103 @@ var tables = []string{
 	"github_pull_request_comments_versioned",
 }
 
+var unifiedViews = map[string]func(v int) string{
+	"owners": func(v int) string {
+		return fmt.Sprintf(`SELECT login, name FROM github_organizations_versioned WHERE %v = ANY(versions)`, v)
+	},
+	"users": func(v int) string {
+		return fmt.Sprintf(`SELECT login, name FROM github_users_versioned WHERE %v = ANY(versions)`, v)
+	},
+	"repositories": func(v int) string {
+		return fmt.Sprintf(`
+			SELECT owner_login AS owner, name, full_name, private, description
+			FROM github_repositories_versioned WHERE %v = ANY(versions)`, v)
+	},
+	"issues": func(v int) string {
+		return fmt.Sprintf(`
+			SELECT repository_owner, repository_name, repository_owner || '/' || repository_name AS repository_full_name,
+				number, state, title, body,
+				created_at, closed_at, updated_at, comments, user_id, user_login, htmlurl AS html_url, labels
+			FROM github_issues_versioned WHERE %v = ANY(versions)`, v)
+	},
+	"issue_comments": func(v int) string {
+		return fmt.Sprintf(`
+			SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
+				c.issue_number, c.created_at, c.body, c.user_id, c.user_login, c.htmlurl AS html_url
+			FROM github_issue_comments_versioned AS c
+			JOIN github_issues_versioned AS i ON
+				i.repository_owner = c.repository_owner AND
+				i.repository_name = c.repository_name AND
+				i.number = c.issue_number WHERE %v = ANY(c.versions)`, v)
+	},
+	"pull_requests": func(v int) string {
+		return fmt.Sprintf(`
+			SELECT repository_owner, repository_name, repository_owner || '/' || repository_name AS repository_full_name,
+				number, state, title, body, created_at, closed_at, merged_at, updated_at,
+				commits, comments, changed_files, additions, deletions, review_comments AS reviews,
+				user_id, user_login, base_repository_name, base_repository_owner,
+				base_repository_name || '/' || base_repository_owner AS base_repository_full_name,
+				head_ref, head_sha, merge_commit_sha, htmlurl AS html_url, labels
+			FROM github_pull_requests_versioned WHERE %v = ANY(versions)`, v)
+	},
+	"pull_request_comments": func(v int) string {
+		return fmt.Sprintf(`
+			SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
+				issue_number AS pull_request_number, c.created_at, c.body, c.user_id, c.user_login, c.htmlurl AS html_url
+			FROM github_issue_comments_versioned AS c
+			JOIN github_pull_requests_versioned AS p ON
+				p.repository_owner = c.repository_owner AND
+				p.repository_name = c.repository_name AND
+				p.number = c.issue_number
+			WHERE %v = ANY(c.versions)
+			UNION
+			SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
+					c.pull_request_number, c.created_at, c.body, c.user_id, c.user_login, c.htmlurl AS html_url
+			FROM github_pull_request_comments_versioned as c
+			WHERE %v = ANY(c.versions)
+			UNION
+			SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
+					c.pull_request_number, c.submitted_at as created_at, c.body, c.user_id, c.user_login, c.htmlurl AS html_url
+			FROM github_pull_request_reviews_versioned as c
+			WHERE c.body <> '' AND %v = ANY(c.versions)`, v, v, v)
+	},
+}
+
 func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 	// Unified schema
 
-	_, err := s.DB.ExecContext(ctx, "DROP MATERIALIZED VIEW IF EXISTS owners")
-	if err != nil {
-		return fmt.Errorf("failed to drop unified view owners: %v", err)
-	}
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW owners AS
-	SELECT login, name
-	FROM github_organizations_versioned WHERE %v = ANY(versions)`, v))
-	if err != nil {
-		return fmt.Errorf("failed to create unified view owners: %v", err)
-	}
+	for table, query := range unifiedViews {
+		_, err := s.DB.ExecContext(ctx, fmt.Sprintf("DROP MATERIALIZED VIEW IF EXISTS %s", table))
+		if err != nil {
+			return fmt.Errorf("failed to drop unified view %s: %v", table, err)
+		}
 
-	_, err = s.DB.ExecContext(ctx, "DROP MATERIALIZED VIEW IF EXISTS users")
-	if err != nil {
-		return fmt.Errorf("failed to drop unified view users: %v", err)
-	}
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW users AS
-	SELECT login, name
-	FROM github_users_versioned WHERE %v = ANY(versions)`, v))
-	if err != nil {
-		return fmt.Errorf("failed to create unified view users: %v", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, "DROP MATERIALIZED VIEW IF EXISTS repositories")
-	if err != nil {
-		return fmt.Errorf("failed to drop unified view repositories: %v", err)
-	}
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW repositories AS
-	SELECT owner_login AS owner, name, full_name, private, description
-	FROM github_repositories_versioned WHERE %v = ANY(versions)`, v))
-	if err != nil {
-		return fmt.Errorf("failed to create unified view repositories: %v", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, "DROP MATERIALIZED VIEW IF EXISTS issues")
-	if err != nil {
-		return fmt.Errorf("failed to drop unified view issues: %v", err)
-	}
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW issues AS
-	SELECT repository_owner, repository_name, repository_owner || '/' || repository_name AS repository_full_name,
-           number, state, title, body,
-           created_at, closed_at, updated_at, comments, user_id, user_login, htmlurl AS html_url, labels
-	FROM github_issues_versioned WHERE %v = ANY(versions)`, v))
-	if err != nil {
-		return fmt.Errorf("failed to create unified view issues: %v", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, "DROP MATERIALIZED VIEW IF EXISTS issue_comments")
-	if err != nil {
-		return fmt.Errorf("failed to drop unified view issue_comments: %v", err)
-	}
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW issue_comments AS
-	SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
-	       c.issue_number, c.created_at, c.body, c.user_id, c.user_login, c.htmlurl AS html_url
-	FROM github_issue_comments_versioned AS c
-	JOIN github_issues_versioned AS i ON
-		 i.repository_owner = c.repository_owner AND
-		 i.repository_name = c.repository_name AND
-		 i.number = c.issue_number WHERE %v = ANY(c.versions)`, v))
-	if err != nil {
-		return fmt.Errorf("failed to create unified view issue_comments: %v", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, "DROP MATERIALIZED VIEW IF EXISTS pull_requests")
-	if err != nil {
-		return fmt.Errorf("failed to drop unified view pull_requests: %v", err)
-	}
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW pull_requests AS
-	SELECT repository_owner, repository_name, repository_owner || '/' || repository_name AS repository_full_name,
-	       number, state, title, body, created_at, closed_at, merged_at, updated_at,
-	       commits, comments, changed_files, additions, deletions, review_comments AS reviews,
-	       user_id, user_login, base_repository_name, base_repository_owner,
-	       base_repository_name || '/' || base_repository_owner AS base_repository_full_name,
-	       head_ref, head_sha, merge_commit_sha, htmlurl AS html_url, labels
-	FROM github_pull_requests_versioned WHERE %v = ANY(versions)`, v))
-	if err != nil {
-		return fmt.Errorf("failed to create unified view pull_requests: %v", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, "DROP MATERIALIZED VIEW IF EXISTS pull_request_reviews")
-	if err != nil {
-		return fmt.Errorf("failed to drop unified view pull_request_reviews: %v", err)
-	}
-	// TODO: state value rename COMMENTED to something else?
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW pull_request_reviews AS
-	SELECT repository_owner, repository_name, repository_owner || '/' || repository_name AS repository_full_name,
-	       pull_request_number, state, submitted_at AS created_at, user_id, user_login, htmlurl AS html_url
-	FROM github_pull_request_reviews_versioned WHERE %v = ANY(versions)`, v))
-	if err != nil {
-		return fmt.Errorf("failed to create VIEW pull_request_reviews: %v", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, "DROP MATERIALIZED VIEW IF EXISTS pull_request_comments")
-	if err != nil {
-		return fmt.Errorf("failed to drop unified view pull_request_comments: %v", err)
-	}
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW pull_request_comments AS
-	SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
-		   issue_number AS pull_request_number, c.created_at, c.body, c.user_id, c.user_login, c.htmlurl AS html_url
-	FROM github_issue_comments_versioned AS c
-	JOIN github_pull_requests_versioned AS p ON
-		 p.repository_owner = c.repository_owner AND
-		 p.repository_name = c.repository_name AND
-		 p.number = c.issue_number
-	WHERE %v = ANY(c.versions)
-	UNION
-	SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
-	       c.pull_request_number, c.created_at, c.body, c.user_id, c.user_login, c.htmlurl AS html_url
-	FROM github_pull_request_comments_versioned as c
-	WHERE %v = ANY(c.versions)
-	UNION
-	SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
-	       c.pull_request_number, c.submitted_at as created_at, c.body, c.user_id, c.user_login, c.htmlurl AS html_url
-	FROM github_pull_request_reviews_versioned as c
-	WHERE c.body <> '' AND %v = ANY(c.versions)
-	`, v, v, v))
-	if err != nil {
-		return fmt.Errorf("failed to create VIEW pull_request_comments: %v", err)
+		_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW %s AS %s`, table, query(v)))
+		if err != nil {
+			return fmt.Errorf("failed to create unified view owners: %v", err)
+		}
 	}
 
 	// GitHub schema without versions
 
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_organizations AS
-	SELECT %s
-	FROM github_organizations_versioned WHERE %v = ANY(versions)`, organizationsCols, v))
-	if err != nil {
-		return fmt.Errorf("failed to create VIEW organizations: %v", err)
-	}
+	for _, table := range tables {
+		var cols string
+		viewName := strings.Replace(table, "_versioned", "", 1)
+		err := s.DB.QueryRowContext(ctx, `SELECT STRING_AGG(column_name, ', ') as cols
+			FROM information_schema.columns
+			WHERE table_name = $1
+			AND table_schema = 'public'
+			AND column_name NOT IN ('sum256', 'versions')`, table).Scan(&cols)
+		if err != nil {
+			return fmt.Errorf("failed to get columns for %s view: %v", viewName, err)
+		}
 
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_users AS
-	SELECT %s
-	FROM github_users_versioned WHERE %v = ANY(versions)`, usersCols, v))
-	if err != nil {
-		return fmt.Errorf("failed to create VIEW users: %v", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_repositories AS
-	SELECT %s
-	FROM github_repositories_versioned WHERE %v = ANY(versions)`, repositoriesCols, v))
-	if err != nil {
-		return fmt.Errorf("failed to create VIEW repositories: %v", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_issues AS
-	SELECT %s
-	FROM github_issues_versioned WHERE %v = ANY(versions)`, issuesCols, v))
-	if err != nil {
-		return fmt.Errorf("failed to create VIEW issues: %v", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_issue_comments AS
-	SELECT %s
-	FROM github_issue_comments_versioned WHERE %v = ANY(versions)`, issueCommentsCols, v))
-	if err != nil {
-		return fmt.Errorf("failed to create VIEW issue_comments: %v", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_pull_requests AS
-	SELECT %s
-	FROM github_pull_requests_versioned WHERE %v = ANY(versions)`, pullRequestsCol, v))
-	if err != nil {
-		return fmt.Errorf("failed to create VIEW pull_requests: %v", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_pull_request_reviews AS
-	SELECT %s
-	FROM github_pull_request_reviews_versioned WHERE %v = ANY(versions)`, pullRequestReviewsCols, v))
-	if err != nil {
-		return fmt.Errorf("failed to create VIEW pull_request_reviews: %v", err)
-	}
-
-	_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW github_pull_request_comments AS
-	SELECT %s
-	FROM github_pull_request_comments_versioned WHERE %v = ANY(versions)`, pullRequestReviewCommentsCols, v))
-	if err != nil {
-		return fmt.Errorf("failed to create VIEW pull_request_comments: %v", err)
+		_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE OR REPLACE VIEW %s AS
+		SELECT %s
+		FROM %s WHERE %v = ANY(versions)`, viewName, cols, table, v))
+		if err != nil {
+			return fmt.Errorf("failed to create VIEW %s: %v", viewName, err)
+		}
 	}
 
 	return nil
