@@ -336,10 +336,10 @@ func testOrgWithDB(t *testing.T, oracle testutils.OrganizationTestOracle, d *Dow
 		numOfUsers        int
 	)
 	// Retrieve data
-	err = db.QueryRow("select htmlurl, created_at, public_repos, total_private_repos from organizations where login = $1", oracle.Org).Scan(&htmlurl, &createdAt, &numOfPublicRepos, &numOfPrivateRepos)
+	err = db.QueryRow("select htmlurl, created_at, public_repos, total_private_repos from github_organizations where login = $1", oracle.Org).Scan(&htmlurl, &createdAt, &numOfPublicRepos, &numOfPrivateRepos)
 	require.NoError(err, "Error in retrieving orgs")
 	// TODO(@kyrcha): when schema is updated add query: select count(*) from users where owner = "src-d" for example
-	err = db.QueryRow("select count(*) from users").Scan(&numOfUsers)
+	err = db.QueryRow("select count(*) from github_users").Scan(&numOfUsers)
 	require.NoError(err, "Error in retrieving users")
 	// Checks
 	require.Equal(oracle.URL, htmlurl)
@@ -385,7 +385,7 @@ func testRepoWithDB(t *testing.T, oracle testutils.RepositoryTestOracle, d *Down
 
 func checkIssues(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
 	var numOfIssues int
-	err := db.QueryRow("select count(*) from issues where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfIssues)
+	err := db.QueryRow("select count(*) from github_issues where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfIssues)
 	require.NoError(err, "Error in retrieving issues")
 	if strict {
 		require.Equal(oracle.NumOfIssues, numOfIssues, "Issues")
@@ -397,7 +397,7 @@ func checkIssues(require *require.Assertions, db *sql.DB, oracle testutils.Repos
 
 func checkIssuePRComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
 	var numOfComments int
-	err := db.QueryRow("select count(*) from issue_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfComments)
+	err := db.QueryRow("select count(*) from github_issue_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfComments)
 	require.NoError(err, "Error in retrieving issue comments")
 	// NB: ghsync saves both Issue and PRs comments in the same table, issue_comments => See store/db.go comment
 	if strict {
@@ -409,7 +409,7 @@ func checkIssuePRComments(require *require.Assertions, db *sql.DB, oracle testut
 
 func checkPRs(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
 	var numOfPRs int
-	err := db.QueryRow("select count(*) from pull_requests where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRs)
+	err := db.QueryRow("select count(*) from github_pull_requests where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRs)
 	require.NoError(err, "Error in retrieving pull requests")
 	if strict {
 		require.Equal(oracle.NumOfPRs, numOfPRs, "PRs")
@@ -420,7 +420,7 @@ func checkPRs(require *require.Assertions, db *sql.DB, oracle testutils.Reposito
 
 func checkPRReviewComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
 	var numOfPRReviewComments int
-	err := db.QueryRow("select count(*) from pull_request_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRReviewComments)
+	err := db.QueryRow("select count(*) from github_pull_request_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRReviewComments)
 	require.NoError(err, "Error in retrieving pull request comments")
 	if strict {
 		require.Equal(oracle.NumOfPRReviewComments, numOfPRReviewComments, "PR Review Comments")
@@ -438,7 +438,7 @@ func checkRepo(require *require.Assertions, db *sql.DB, oracle testutils.Reposit
 		hasWiki   bool
 		topics    []string
 	)
-	err := db.QueryRow("select htmlurl, created_at, private, archived, has_wiki, topics from repositories where owner_login = $1 and name = $2", oracle.Owner, oracle.Repository).Scan(&htmlurl, &createdAt, &private, &archived, &hasWiki, pq.Array(&topics))
+	err := db.QueryRow("select htmlurl, created_at, private, archived, has_wiki, topics from github_repositories where owner_login = $1 and name = $2", oracle.Owner, oracle.Repository).Scan(&htmlurl, &createdAt, &private, &archived, &hasWiki, pq.Array(&topics))
 	require.NoError(err, "Error in retrieving repo")
 	require.Equal(oracle.URL, htmlurl)
 	require.Equal(oracle.CreatedAt, createdAt.UTC().String())
@@ -528,7 +528,7 @@ func (suite *DownloaderTestSuite) AfterTest(suiteName, testName string) {
 		suite.downloader.Cleanup(context.TODO(), 1)
 		// Check
 		var countOrgs int
-		err := suite.db.QueryRow("select count(*) from organizations").Scan(&countOrgs)
+		err := suite.db.QueryRow("select count(*) from github_organizations").Scan(&countOrgs)
 		suite.NoError(err, "Failed to count the orgs")
 		suite.Equal(0, countOrgs)
 	} else if testName == "TestOnlineRepositoryDownloadWithDB" || testName == "TestOfflineRepositoryDownloadWithDB" {
@@ -536,7 +536,7 @@ func (suite *DownloaderTestSuite) AfterTest(suiteName, testName string) {
 		suite.downloader.Cleanup(context.TODO(), 1)
 		// Check
 		var countRepos int
-		err := suite.db.QueryRow("select count(*) from repositories").Scan(&countRepos)
+		err := suite.db.QueryRow("select count(*) from github_repositories").Scan(&countRepos)
 		suite.NoError(err, "Failed to count the repos")
 		suite.Equal(0, countRepos)
 	}
