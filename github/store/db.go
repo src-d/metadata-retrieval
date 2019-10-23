@@ -166,7 +166,19 @@ func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 	JOIN github_pull_requests_versioned AS p ON
 		 p.repository_owner = c.repository_owner AND
 		 p.repository_name = c.repository_name AND
-		 p.number = c.issue_number WHERE %v = ANY(c.versions)`, v))
+		 p.number = c.issue_number
+	WHERE %v = ANY(c.versions)
+	UNION
+	SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
+	       c.pull_request_number, c.created_at, c.body, c.user_id, c.user_login, c.htmlurl AS html_url
+	FROM github_pull_request_comments_versioned as c
+	WHERE %v = ANY(c.versions)
+	UNION
+	SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
+	       c.pull_request_number, c.submitted_at as created_at, c.body, c.user_id, c.user_login, c.htmlurl AS html_url
+	FROM github_pull_request_reviews_versioned as c
+	WHERE c.body <> '' AND %v = ANY(c.versions)
+	`, v, v, v))
 	if err != nil {
 		return fmt.Errorf("failed to create VIEW pull_request_comments: %v", err)
 	}
