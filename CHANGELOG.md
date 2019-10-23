@@ -10,6 +10,8 @@ The changes listed under `Unreleased` section have landed in master but are not 
 
 ## [Unreleased]
 
+## [v0.1.0](https://github.com/src-d/metadata-retrieval/releases/tag/v0.1.0) - 2019-10-23
+
 Initial release for downloading metadata from git hostings. Available commands:
 
 - Download organization
