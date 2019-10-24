@@ -45,6 +45,15 @@ var testCases = map[string]response{
 		response:   apiResponse{Data: "whatever"},
 		err:        nil,
 	},
+	// unauthorized answer
+	"/unauthorized": response{
+		statusCode: http.StatusUnauthorized,
+		headers:    nil,
+		response: apiResponse{
+			apiErrorResponse: apiErrorResponse{Message: "Bad credentials"},
+		},
+		err: nil,
+	},
 	// 403 with proper AbuseRateLimit body but without headers
 	"/abuse_no_headder": response{
 		statusCode: http.StatusForbidden,
@@ -290,6 +299,31 @@ func (s *RateLimitSuite) TestAbuse() {
 	s.True(elapsed > defaultAbuseReset, "request took %s, but it should be, at least %s", elapsed, defaultAbuseReset)
 	s.Contains(s.loggerMock.Next(), "rate limit reached, sleeping until")
 	s.Equal("", s.loggerMock.Next())
+}
+
+// TestUnauthorized ensures that hitting unauthroized requests doesn't cause a wait period
+func (s *RateLimitSuite) TestUnauthorized() {
+	t0 := time.Now()
+
+	response, err := s.transport.RoundTrip(newRequest("/unauthorized"))
+	s.require.Error(err)
+	s.IsType(&ErrUnauthorized{}, err)
+
+	err = err.(*ErrUnauthorized)
+	s.require.Equal(err.Error(), "unauthorized: Bad credentials")
+
+	elapsed := time.Now().Sub(t0)
+	s.True(elapsed < 500*time.Millisecond, "request took %s, but it should be almost instant", elapsed)
+	s.Equal("", s.loggerMock.Next())
+
+	content, err := ioutil.ReadAll(response.Body)
+	s.require.NoError(err)
+
+	var data apiResponse
+	err = json.Unmarshal(content, &data)
+	s.require.NoError(err)
+
+	s.Equal("Bad credentials", data.apiErrorResponse.Message)
 }
 
 // TestAbuseWhithoutHeadersButWithProperBody ensures that a 403 Forbidden Response having a proper Abuse body is handled
