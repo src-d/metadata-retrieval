@@ -69,12 +69,31 @@ func (rt *RateLimitTransport) RoundTrip(req *http.Request) (*http.Response, erro
 		return resp, err
 	}
 
+	if errUnauth := checkResponseUnauth(resp); errUnauth != nil {
+		return resp, errUnauth
+	}
+
 	if errRateLimit := checkResponseRateLimit(resp, rt.logger, rt.defaultAbuseSleep); errRateLimit != nil {
 		rt.lockedUntil = errRateLimit.when()
 		return resp, errRateLimit
 	}
 
 	return resp, nil
+}
+
+// checkResponseUnauth checks whether the request is authenticated
+func checkResponseUnauth(resp *http.Response) error {
+	if resp.StatusCode == http.StatusUnauthorized {
+		errorResponse := &apiErrorResponse{}
+		err := readAPIErrorResponse(resp, errorResponse)
+		if err != nil {
+			return err
+		}
+
+		return &ErrUnauthorized{message: errorResponse.Message}
+	}
+
+	return nil
 }
 
 // checkRateLimit checks the API response and returns a whener error if a rate limit was found:
@@ -124,6 +143,15 @@ func (e *errRetryLater) Error() string {
 
 func (e *errRetryLater) when() time.Time {
 	return e.retryAfter
+}
+
+// ErrUnauthorized is returned when a response returns 401
+type ErrUnauthorized struct {
+	message string
+}
+
+func (e *ErrUnauthorized) Error() string {
+	return fmt.Sprintf("unauthorized: %s", e.message)
 }
 
 type whener interface {

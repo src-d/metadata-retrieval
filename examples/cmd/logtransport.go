@@ -36,7 +36,15 @@ func (t *logTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 
 	t.Logger.With(
-		log.Fields{"elapsed": time.Since(t0), "response-code": resp.StatusCode, "url": r.URL, "request-body": string(reqBody), "response-body": string(respBody)},
+		log.Fields{
+			"elapsed":         time.Since(t0),
+			"response-code":   resp.StatusCode,
+			"url":             r.URL,
+			"request-header":  r.Header,
+			"request-body":    string(reqBody),
+			"response-header": resp.Header,
+			"response-body":   string(respBody),
+		},
 	).Debugf("HTTP response")
 
 	resp.Body = ioutil.NopCloser(bytes.NewBuffer(respBody))

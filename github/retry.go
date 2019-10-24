@@ -38,6 +38,10 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return backoff.Permanent(err)
 		}
 
+		if err, ok := err.(*ErrUnauthorized); ok {
+			return backoff.Permanent(err)
+		}
+
 		if err != nil {
 			return err
 		}
@@ -84,7 +88,8 @@ func retry(operation backoff.Operation) error {
 	err := backoff.RetryNotify(operation, backoff.WithMaxRetries(backoffPolicy, maxRetries), onError)
 
 	if err != nil {
-		log.Errorf(err, "retry was aborted after %d attempts and %d", retryCount, backoffPolicy.GetElapsedTime())
+		elapsed := backoffPolicy.GetElapsedTime().Seconds()
+		log.Errorf(err, "retry was aborted after %d attempts and %fs", retryCount, elapsed)
 	}
 
 	return err
