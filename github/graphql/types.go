@@ -212,12 +212,12 @@ type Actor struct {
 }
 
 type IssueFields struct {
-	Body       string    // body text,
-	ClosedAt   time.Time // closed_at timestamptz,
-	CreatedAt  time.Time // created_at timestamptz,
-	URL        string    // htmlurl text,
-	DatabaseID int       // id bigint,
-	Locked     bool      // locked boolean,
+	Body       string     // body text,
+	ClosedAt   *time.Time // closed_at timestamptz,
+	CreatedAt  time.Time  // created_at timestamptz,
+	URL        string     // htmlurl text,
+	DatabaseID int        // id bigint,
+	Locked     bool       // locked boolean,
 	Milestone  struct {
 		ID    string // milestone_id text NOT NULL,
 		Title string // milestone_title text NOT NULL,
@@ -306,12 +306,12 @@ type Ref struct {
 }
 
 type PullRequestFields struct {
-	Additions         int       // additions bigint,
-	AuthorAssociation string    // author_association text,
-	BaseRef           Ref       // base_*
-	Body              string    // body text,
-	ChangedFiles      int       // changed_files bigint,
-	ClosedAt          time.Time // closed_at timestamptz,
+	Additions         int        // additions bigint,
+	AuthorAssociation string     // author_association text,
+	BaseRef           Ref        // base_*
+	Body              string     // body text,
+	ChangedFiles      int        // changed_files bigint,
+	ClosedAt          *time.Time // closed_at timestamptz,
 	Commits           struct {
 		TotalCount int // commits bigint,
 	}
@@ -324,10 +324,10 @@ type PullRequestFields struct {
 	MergeCommit         struct {
 		Oid string // merge_commit_sha text,
 	}
-	Mergeable string    // mergeable boolean,
-	Merged    bool      // merged boolean,
-	MergedAt  time.Time // merged_at timestamptz,
-	MergedBy  Actor     // merged_by_id bigint NOT NULL, merged_by_login text NOT NULL,
+	Mergeable string     // mergeable boolean,
+	Merged    bool       // merged boolean,
+	MergedAt  *time.Time // merged_at timestamptz,
+	MergedBy  Actor      // merged_by_id bigint NOT NULL, merged_by_login text NOT NULL,
 	Milestone struct {
 		ID    string // milestone_id text NOT NULL,
 		Title string // milestone_title text NOT NULL,
