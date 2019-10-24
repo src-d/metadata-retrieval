@@ -33,19 +33,21 @@ import (
 )
 
 const (
-	orgPrefix            = "../testdata/organization_src-d_2019-10-17"
-	repoPrefix           = "../testdata/repository_src-d_gitbase_2019-10-17"
-	orgRecFile           = orgPrefix + ".gob.gz"
-	repoRecFile          = repoPrefix + ".gob.gz"
-	offlineRepoTests     = repoPrefix + ".json"
-	offlineOrgTests      = orgPrefix + ".json"
-	onlineRepoTests      = "../testdata/online-repository-tests.json"
-	onlineOrgTests       = "../testdata/online-organization-tests.json"
-	onlineReposListTests = "../testdata/online-repositories-list-tests.json"
+	orgPrefix               = "../testdata/organization_src-d_2019-10-24"
+	repoPrefix              = "../testdata/repository_src-d_gitbase_2019-10-24"
+	orgRecFile              = orgPrefix + ".gob.gz"
+	repoRecFile             = repoPrefix + ".gob.gz"
+	offlineRepoTests        = repoPrefix + ".json"
+	offlineOrgTests         = orgPrefix + ".json"
+	onlineRepoTests         = "../testdata/online-repository-tests.json"
+	onlineOrgTests          = "../testdata/online-organization-tests.json"
+	onlineReposListTests    = "../testdata/online-repositories-list-tests.json"
+	malformed200ErrorFile   = "../testdata/200_malformed_2019-10-24.gob.gz"
+	unmarshable200ErrorFile = "../testdata/200_unmarshable_2019-10-24.gob.gz"
+	exceed200ErrorFile      = "../testdata/200_exceed_2019-10-24.gob.gz"
 )
 
-// loads requests-response data from a gob file
-func loadReqResp(filepath string, reqResp map[string]string) error {
+func loadReqResp(filepath string, reqResp map[string]testutils.Response) error {
 	// Open a file
 	decodeFile, err := os.Open(filepath)
 	if err != nil {
@@ -277,7 +279,8 @@ func testOrg(t *testing.T, oracle testutils.OrganizationTestOracle, d *Downloade
 	require.Len(storer.Users, oracle.NumOfUsers)
 }
 
-func getRoundTripDownloader(reqResp map[string]string, storer storer) *Downloader {
+func getRoundTripDownloader(reqResp map[string]testutils.Response, storer storer) *Downloader {
+
 	return &Downloader{
 		storer: storer,
 		client: githubv4.NewClient(&http.Client{
@@ -289,11 +292,21 @@ func getRoundTripDownloader(reqResp map[string]string, storer storer) *Downloade
 				// recreate request body
 				req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 				req.ContentLength = savecl
-				data := reqResp[string(bodyBytes)]
+				// if it contains a single request-response
+				// pair then it is probably an error...
+				// just pass it whatever was the request
+				var data testutils.Response
+				if len(reqResp) > 1 {
+					data = reqResp[string(bodyBytes)]
+				} else {
+					for _, data = range reqResp {
+						break
+					}
+				}
 				return &http.Response{
-					StatusCode: 200,
-					Body:       ioutil.NopCloser(bytes.NewBufferString(data)),
-					Header:     make(http.Header),
+					StatusCode: data.Status,
+					Body:       ioutil.NopCloser(bytes.NewBufferString(data.Body)),
+					Header:     data.Header,
 				}
 			})}),
 	}
@@ -302,7 +315,7 @@ func getRoundTripDownloader(reqResp map[string]string, storer storer) *Downloade
 // TestOfflineOrganizationDownload Tests a large organization by replaying recorded responses
 func (suite *DownloaderTestSuite) TestOfflineOrganizationDownload() {
 	t := suite.T()
-	reqResp := make(map[string]string)
+	reqResp := make(map[string]testutils.Response)
 	// Load the recording
 	suite.NoError(loadReqResp(orgRecFile, reqResp), "Failed to read the offline recordings")
 	// Setup the downloader with RoundTrip functionality.
@@ -321,10 +334,29 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownload() {
 	}
 }
 
+func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithErrors() {
+	ctx := context.Background()
+	storer := &testutils.Memory{}
+	reqResp := make(map[string]testutils.Response)
+	suite.NoError(loadReqResp(malformed200ErrorFile, reqResp), "Failed to read the offline recordings")
+	downloader := getRoundTripDownloader(reqResp, storer)
+	suite.Error(downloader.DownloadRepository(ctx, "src-d", "gitbase", 0))
+
+	reqResp = make(map[string]testutils.Response)
+	suite.NoError(loadReqResp(unmarshable200ErrorFile, reqResp), "Failed to read the offline recordings")
+	downloader = getRoundTripDownloader(reqResp, storer)
+	suite.Error(downloader.DownloadRepository(ctx, "src-d", "gitbase", 0))
+
+	reqResp = make(map[string]testutils.Response)
+	suite.NoError(loadReqResp(exceed200ErrorFile, reqResp), "Failed to read the offline recordings")
+	downloader = getRoundTripDownloader(reqResp, storer)
+	suite.Error(downloader.DownloadRepository(ctx, "src-d", "gitbase", 0))
+}
+
 // TestOfflineRepositoryDownload Tests a large repository by replaying recorded responses
 func (suite *DownloaderTestSuite) TestOfflineRepositoryDownload() {
 	t := suite.T()
-	reqResp := make(map[string]string)
+	reqResp := make(map[string]testutils.Response)
 	suite.NoError(loadReqResp(repoRecFile, reqResp), "Failed to read the offline recordings")
 	storer := &testutils.Memory{}
 	downloader := getRoundTripDownloader(reqResp, storer)
@@ -489,7 +521,7 @@ func (suite *DownloaderTestSuite) TestOnlineRepositoryDownloadWithDB() {
 // TestOfflineOrganizationDownloadWithDB Tests a large organization by replaying recorded responses and storing the results in Postgresql
 func (suite *DownloaderTestSuite) TestOfflineOrganizationDownloadWithDB() {
 	t := suite.T()
-	reqResp := make(map[string]string)
+	reqResp := make(map[string]testutils.Response)
 	// Load the recording
 	suite.NoError(loadReqResp(orgRecFile, reqResp), "Failed to read the recordings")
 	// Setup the downloader with RoundTrip functionality.
@@ -512,7 +544,7 @@ func (suite *DownloaderTestSuite) TestOfflineOrganizationDownloadWithDB() {
 // TestOfflineRepositoryDownload Tests a large repository by replaying recorded responses and stores the results in postgresql
 func (suite *DownloaderTestSuite) TestOfflineRepositoryDownloadWithDB() {
 	t := suite.T()
-	reqResp := make(map[string]string)
+	reqResp := make(map[string]testutils.Response)
 	// Load the recording
 	suite.NoError(loadReqResp(repoRecFile, reqResp), "Failed to read the recordings")
 	storer := &store.DB{DB: suite.db}
