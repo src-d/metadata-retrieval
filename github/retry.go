@@ -38,6 +38,10 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return backoff.Permanent(err)
 		}
 
+		if err, ok := err.(*ErrUnauthorized); ok {
+			return backoff.Permanent(err)
+		}
+
 		if err != nil {
 			return err
 		}
