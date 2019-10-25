@@ -35,6 +35,8 @@ func (suite *RetryTestSuite) SetupSuite() {
 
 // TestRetry tests online retries with really big queries that (almost always) return a 502
 func (suite *RetryTestSuite) TestRetry() {
+	t := suite.T()
+	checkToken(t)
 	log.Infof("Record 502 server error")
 	gqlMarshalled, _ := json.Marshal(testutils.GQLRequest{Query: testutils.ReallyBigQuery})
 	req, _ := http.NewRequest("POST", testutils.Endpoint, strings.NewReader(string(gqlMarshalled)))
