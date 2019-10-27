@@ -2,13 +2,10 @@ package github
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/http"
 
 	"github.com/src-d/metadata-retrieval/github/graphql"
-	"github.com/src-d/metadata-retrieval/github/store"
-	"github.com/src-d/metadata-retrieval/testutils"
 	"github.com/src-d/metadata-retrieval/utils/ctxlog"
 
 	"github.com/shurcooL/githubv4"
@@ -36,7 +33,8 @@ var (
 	membersWithRole               = connectionType{"membersWithRole", 100, true}
 )
 
-type storer interface {
+// Storer is an interface required by Downloader to persist the downloaded data
+type Storer interface {
 	SaveOrganization(ctx context.Context, organization *graphql.Organization) error
 	SaveUser(ctx context.Context, orgID int, orgLogin string, user *graphql.UserExtended) error
 	SaveRepository(ctx context.Context, repository *graphql.RepositoryFields, topics []string) error
@@ -57,40 +55,16 @@ type storer interface {
 
 // Downloader fetches GitHub data using the v4 API
 type Downloader struct {
-	storer
+	storer Storer
 	client *githubv4.Client
 }
 
 // NewDownloader creates a new Downloader that will store the GitHub metadata
 // in the given DB. The HTTP client is expected to have the proper
 // authentication setup
-func NewDownloader(httpClient *http.Client, db *sql.DB) (*Downloader, error) {
+func NewDownloader(httpClient *http.Client, storer Storer) (*Downloader, error) {
 	return &Downloader{
-		storer: &store.DB{DB: db},
-		client: githubv4.NewClient(httpClient),
-	}, nil
-}
-
-// NewStdoutDownloader creates a new Downloader that will print the GitHub
-// metadata to stdout. The HTTP client is expected to have the proper
-// authentication setup
-func NewStdoutDownloader(httpClient *http.Client) (*Downloader, error) {
-	return &Downloader{
-		storer: &store.Stdout{},
-		client: githubv4.NewClient(httpClient),
-	}, nil
-}
-
-// NewMemoryDownloader creates a new Downloader that stores GitHub data in memory.
-// The HTTP client is expected to have the proper authentication setup
-func NewMemoryDownloader(httpClient *http.Client, memory *testutils.Memory) (*Downloader, error) {
-	// TODO: is the ghsync rate limited client needed?
-
-	t := &retryTransport{httpClient.Transport}
-	httpClient.Transport = t
-
-	return &Downloader{
-		storer: memory,
+		storer: storer,
 		client: githubv4.NewClient(httpClient),
 	}, nil
 }
