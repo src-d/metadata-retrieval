@@ -271,11 +271,6 @@ func (c *DownloaderCmd) ExecuteBody(logger log.Logger, fn bodyFunc) error {
 		return err
 	}
 
-	err = c.commit(ctx, downloadersPool)
-	if err != nil {
-		return err
-	}
-
 	stats, err := downloadersPool.End(ctx)
 
 	logger.With(log.Fields{"total-elapsed": stats.Elapsed}).Infof("all metadata fetched")
@@ -286,23 +281,31 @@ func (c *DownloaderCmd) ExecuteBody(logger log.Logger, fn bodyFunc) error {
 		}).Infof("token usage")
 	}
 
+	d, err := github.NewDownloader(nil, storer)
+	if err != nil {
+		return err
+	}
+
+	err = c.commit(ctx, d)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (c *DownloaderCmd) commit(ctx context.Context, dp *DownloadersPool) error {
-	return dp.WithDownloader(func(d *github.Downloader) error {
-		var err error
-		err = d.SetCurrent(ctx, c.Version)
-		if err != nil {
-			return err
-		}
+func (c *DownloaderCmd) commit(ctx context.Context, d *github.Downloader) error {
+	var err error
+	err = d.SetCurrent(ctx, c.Version)
+	if err != nil {
+		return err
+	}
 
-		if c.Cleanup {
-			return d.Cleanup(ctx, c.Version)
-		}
+	if c.Cleanup {
+		return d.Cleanup(ctx, c.Version)
+	}
 
-		return nil
-	})
+	return nil
 }
 
 func (c *DownloaderCmd) buildDownloadersPool(logger log.Logger, storer github.Storer) (*DownloadersPool, error) {
