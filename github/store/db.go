@@ -101,6 +101,13 @@ var unifiedViews = map[string]func(v int) string{
 				head_ref, head_sha, merge_commit_sha, htmlurl AS html_url, labels
 			FROM github_pull_requests_versioned WHERE %v = ANY(versions)`, v)
 	},
+	"pull_request_reviews": func(v int) string {
+		return fmt.Sprintf(`
+			SELECT repository_owner, repository_name, repository_owner || '/' || repository_name AS repository_full_name,
+				pull_request_number, submitted_at as created_at, user_id, user_login, htmlurl AS html_url,
+				CASE WHEN state = 'CHANGES_REQUESTED' THEN 'COMMENTED' ELSE state END
+			FROM github_pull_request_reviews_versioned WHERE %v = ANY(versions)`, v)
+	},
 	"pull_request_comments": func(v int) string {
 		return fmt.Sprintf(`
 			SELECT c.repository_owner, c.repository_name, c.repository_owner || '/' || c.repository_name AS repository_full_name,
@@ -135,7 +142,7 @@ func (s *DB) SetActiveVersion(ctx context.Context, v int) error {
 
 		_, err = s.DB.ExecContext(ctx, fmt.Sprintf(`CREATE MATERIALIZED VIEW %s AS %s`, table, query(v)))
 		if err != nil {
-			return fmt.Errorf("failed to create unified view owners: %v", err)
+			return fmt.Errorf("failed to create unified view %v: %v", table, err)
 		}
 	}
 
