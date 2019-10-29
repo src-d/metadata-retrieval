@@ -10,6 +10,18 @@ The changes listed under `Unreleased` section have landed in master but are not 
 
 ## [Unreleased]
 
+### Breaking changes
+
+- Change some api for internal simplification ([#72](https://github.com/src-d/metadata-retrieval/pull/72)):
+  - change signature of `NewDownloader`: now the accepted params are `(httpClient *http.Client, storer Storer)`
+  - remove `NewStdoutDownloader` and `NewMemoryDownloader` in favor of `NewDownloader`
+
+### Changed
+
+- Expose `Storer` ([#72](https://github.com/src-d/metadata-retrieval/pull/72)).
+- Change db schema for Github metadata to fit the common schema ([#35](https://github.com/src-d/metadata-retrieval/issues/35))
+- Tune first fat request for each repo by changing the amount of issues and PRs to fetch ([#69](https://github.com/src-d/metadata-retrieval/issues/69))
+
 
 ## [v0.1.1](https://github.com/src-d/metadata-retrieval/releases/tag/v0.1.1) - 2019-10-24
 
