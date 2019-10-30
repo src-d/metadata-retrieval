@@ -8,6 +8,7 @@ env:
     - PSQL_USER=user
     - PSQL_PWD=password
     - PSQL_DB=ghsync
+    - GITHUB_TOKENS=$GITHUB_TOKEN
 
 branches:
   only:

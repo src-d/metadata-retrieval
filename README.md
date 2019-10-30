@@ -376,7 +376,7 @@ To test, run:
 
 ```shell
 # set your github personal access token (scopes 'read:org', 'repo')
-export GITHUB_TOKEN=<xxx>
+export GITHUB_TOKENS=<xxx>
 
 # start the database if not already running
 export POSTGRES_USER=user
