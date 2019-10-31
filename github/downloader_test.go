@@ -33,8 +33,8 @@ import (
 )
 
 const (
-	orgPrefix            = "../testdata/organization_src-d_2019-10-17"
-	repoPrefix           = "../testdata/repository_src-d_gitbase_2019-10-17"
+	orgPrefix            = "../testdata/organization_src-d_2019-10-31"
+	repoPrefix           = "../testdata/repository_src-d_gitbase_2019-10-31"
 	orgRecFile           = orgPrefix + ".gob.gz"
 	repoRecFile          = repoPrefix + ".gob.gz"
 	offlineRepoTests     = repoPrefix + ".json"
