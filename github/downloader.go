@@ -24,9 +24,9 @@ func (c connectionType) Cursor() string { return fmt.Sprintf("%sCursor", c.Name)
 var (
 	topicsType                    = connectionType{"repositoryTopics", 10, false}
 	assigneesType                 = connectionType{"assignees", 2, false}
-	issuesType                    = connectionType{"issues", 50, true}
+	issuesType                    = connectionType{"issues", 35, true}
 	issueCommentsType             = connectionType{"issueComments", 10, false}
-	pullRequestsType              = connectionType{"pullRequests", 50, true}
+	pullRequestsType              = connectionType{"pullRequests", 35, true}
 	pullRequestReviewsType        = connectionType{"pullRequestReviews", 5, false}
 	pullRequestReviewCommentsType = connectionType{"pullRequestReviewComments", 5, false}
 	labelsType                    = connectionType{"labels", 2, false}
