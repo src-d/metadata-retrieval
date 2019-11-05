@@ -81,8 +81,8 @@ func loadTests(filepath string) (testutils.TestOracles, error) {
 
 // checks whether a token exists as an env var, if not it skips the test
 func checkToken(t *testing.T) {
-	if os.Getenv("GITHUB_TOKEN") == "" {
-		t.Skip("GITHUB_TOKEN is not set")
+	if strings.Split(os.Getenv("GITHUB_TOKENS"), ",")[0] == "" {
+		t.Skip("GITHUB_TOKENS is not set")
 	}
 }
 
@@ -130,7 +130,7 @@ func getMemoryDownloader() (*Downloader, *testutils.Memory, error) {
 		oauth2.NewClient(
 			context.TODO(),
 			oauth2.StaticTokenSource(
-				&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
+				&oauth2.Token{AccessToken: strings.Split(os.Getenv("GITHUB_TOKENS"), ",")[0]},
 			)),
 		storer)
 	if err != nil {
@@ -359,7 +359,7 @@ func (suite *DownloaderTestSuite) TestOnlineOrganizationDownloadWithDB() {
 	downloader, err := NewDownloader(oauth2.NewClient(
 		context.TODO(),
 		oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
+			&oauth2.Token{AccessToken: strings.Split(os.Getenv("GITHUB_TOKENS"), ",")[0]},
 		)), store.NewDB(suite.db))
 	suite.NoError(err, "Failed to init the downloader")
 	downloader.SetCurrent(context.TODO(), 0)
@@ -458,7 +458,7 @@ func (suite *DownloaderTestSuite) TestOnlineRepositoryDownloadWithDB() {
 	downloader, err := NewDownloader(oauth2.NewClient(
 		context.TODO(),
 		oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
+			&oauth2.Token{AccessToken: strings.Split(os.Getenv("GITHUB_TOKENS"), ",")[0]},
 		)), store.NewDB(suite.db))
 	suite.NoError(err, "Failed to init the downloader")
 	downloader.SetCurrent(context.TODO(), 0)

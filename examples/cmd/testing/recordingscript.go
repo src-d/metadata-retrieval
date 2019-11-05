@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/src-d/metadata-retrieval/github"
@@ -46,7 +47,7 @@ func main() {
 	client := oauth2.NewClient(
 		ctx,
 		oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
+			&oauth2.Token{AccessToken: strings.Split(os.Getenv("GITHUB_TOKENS"), ",")[0]},
 		))
 
 	client.Transport = &loghttp.Transport{
