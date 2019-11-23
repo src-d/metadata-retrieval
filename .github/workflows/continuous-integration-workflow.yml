@@ -1,0 +1,44 @@
+name: Test on ubuntu, macosx and windows
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  test:
+    name: Test on go ${{ matrix.go_version }} and ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        go_version: [1.13]
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+    env:
+      PSQL_USER: user
+      PSQL_PWD: password
+      PSQL_DB: ghsync
+
+    steps:
+
+    - name: Set up Go ${{ matrix.go_version }}
+      uses: actions/setup-go@v1
+      with:
+        go-version: ${{ matrix.go_version }}
+      id: go
+
+    - name: Check-out code
+      uses: actions/checkout@v1
+
+    - name: Spin up docker compose
+      run: docker-compose up -d
+      if: matrix.os == 'ubuntu-latest'
+
+    - name: Test
+      run: |
+        make test-coverage
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
