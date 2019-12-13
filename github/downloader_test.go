@@ -334,12 +334,12 @@ func testOrgWithDB(t *testing.T, oracle testutils.OrganizationTestOracle, d *Dow
 		numOfPublicRepos  int
 		numOfPrivateRepos int
 		numOfUsers        int
+		count             int
 	)
 	// Retrieve data
-	err = db.QueryRow("select htmlurl, created_at, public_repos, total_private_repos from github_organizations where login = $1", oracle.Org).Scan(&htmlurl, &createdAt, &numOfPublicRepos, &numOfPrivateRepos)
+	err = db.QueryRow("select htmlurl, created_at, public_repos, total_private_repos from github_organizations_versioned where login = $1", oracle.Org).Scan(&htmlurl, &createdAt, &numOfPublicRepos, &numOfPrivateRepos)
 	require.NoError(err, "Error in retrieving orgs")
-	// TODO(@kyrcha): when schema is updated add query: select count(*) from users where owner = "src-d" for example
-	err = db.QueryRow("select count(*) from github_users").Scan(&numOfUsers)
+	err = db.QueryRow("select count(*) from github_users_versioned where organization_login = $1", oracle.Org).Scan(&numOfUsers)
 	require.NoError(err, "Error in retrieving users")
 	// Checks
 	require.Equal(oracle.URL, htmlurl)
@@ -347,6 +347,18 @@ func testOrgWithDB(t *testing.T, oracle testutils.OrganizationTestOracle, d *Dow
 	require.Equal(oracle.PublicRepos, numOfPublicRepos)
 	require.Equal(oracle.TotalPrivateRepos, numOfPrivateRepos)
 	require.Equal(oracle.NumOfUsers, numOfUsers)
+	// Check also the views
+	// I need to refresh first since postgresql by itself will not
+	_, err = db.ExecContext(context.TODO(), "REFRESH MATERIALIZED VIEW owners;")
+	require.NoError(err, "Error in refreshing view owners")
+	err = db.QueryRow("select count(*) from owners where login = $1", oracle.Org).Scan(&count)
+	require.NoError(err, "Error in retrieving view owners")
+	require.Equal(1, count)
+	_, err = db.ExecContext(context.TODO(), "REFRESH MATERIALIZED VIEW users;")
+	require.NoError(err, "Error in refreshing view users")
+	err = db.QueryRow("select count(*) from users").Scan(&count)
+	require.NoError(err, "Error in retrieving view users")
+	require.GreaterOrEqual(oracle.NumOfUsers, count) // could have users from other orgs in the view
 }
 
 // TestOnlineOrganizationDownloadWithDB Tests the download of known and fixed GitHub repositories and stores them in a Postgresql DB
@@ -384,61 +396,87 @@ func testRepoWithDB(t *testing.T, oracle testutils.RepositoryTestOracle, d *Down
 }
 
 func checkIssues(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
-	var numOfIssues int
-	err := db.QueryRow("select count(*) from github_issues where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfIssues)
+	var numOfIssues, numOfIssuesFromView int
+	err := db.QueryRow("select count(*) from github_issues_versioned where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfIssues)
 	require.NoError(err, "Error in retrieving issues")
+	_, err = db.ExecContext(context.TODO(), "REFRESH MATERIALIZED VIEW issues;")
+	require.NoError(err, "Error in refreshing view issues")
+	err = db.QueryRow("select count(*) from issues where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfIssuesFromView)
+	require.NoError(err, "Error in retrieving view issues")
 	if strict {
 		require.Equal(oracle.NumOfIssues, numOfIssues, "Issues")
+		require.Equal(oracle.NumOfIssues, numOfIssues, "Issues from View")
 	} else {
 		require.GreaterOrEqual(oracle.NumOfIssues, numOfIssues, "Issues")
+		require.GreaterOrEqual(oracle.NumOfIssues, numOfIssues, "Issues from View")
 	}
 
 }
 
 func checkIssuePRComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
-	var numOfComments int
-	err := db.QueryRow("select count(*) from github_issue_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfComments)
+	var numOfComments, numOfCommentsFromView int
+	err := db.QueryRow("select count(*) from github_issue_comments_versioned where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfComments)
 	require.NoError(err, "Error in retrieving issue comments")
+	_, err = db.ExecContext(context.TODO(), "REFRESH MATERIALIZED VIEW issue_comments;")
+	require.NoError(err, "Error in refreshing view issue_comments")
+	err = db.QueryRow("select count(*) from issue_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfCommentsFromView)
+	require.NoError(err, "Error in retrieving view issue_comments")
 	// NB: ghsync saves both Issue and PRs comments in the same table, issue_comments => See store/db.go comment
 	if strict {
 		require.Equal(oracle.NumOfPRComments+oracle.NumOfIssueComments, numOfComments, "Issue and PR Comments")
+		require.Equal(oracle.NumOfIssueComments, numOfCommentsFromView, "Issue Comments from View")
 	} else {
 		require.GreaterOrEqual(oracle.NumOfPRComments+oracle.NumOfIssueComments, numOfComments, "Issue and PR Comments")
+		require.GreaterOrEqual(oracle.NumOfIssueComments, numOfCommentsFromView, "Issue Comments from View")
 	}
 }
 
 func checkPRs(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
-	var numOfPRs int
-	err := db.QueryRow("select count(*) from github_pull_requests where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRs)
+	var numOfPRs, numOfPRsFromView int
+	err := db.QueryRow("select count(*) from github_pull_requests_versioned where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRs)
 	require.NoError(err, "Error in retrieving pull requests")
+	_, err = db.ExecContext(context.TODO(), "REFRESH MATERIALIZED VIEW pull_requests;")
+	require.NoError(err, "Error in refreshing view pull_requests")
+	err = db.QueryRow("select count(*) from pull_requests where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRsFromView)
+	require.NoError(err, "Error in retrieving view pull_requests")
 	if strict {
 		require.Equal(oracle.NumOfPRs, numOfPRs, "PRs")
+		require.Equal(oracle.NumOfPRs, numOfPRsFromView, "PRs from View")
 	} else {
 		require.GreaterOrEqual(oracle.NumOfPRs, numOfPRs, "PRs")
+		require.GreaterOrEqual(oracle.NumOfPRs, numOfPRsFromView, "PRs from View")
 	}
 }
 
 func checkPRReviewComments(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
-	var numOfPRReviewComments int
-	err := db.QueryRow("select count(*) from github_pull_request_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRReviewComments)
+	var numOfPRReviewComments, numOfPRReviewCommentsFromView int
+	err := db.QueryRow("select count(*) from github_pull_request_comments_versioned where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRReviewComments)
 	require.NoError(err, "Error in retrieving pull request comments")
+	_, err = db.ExecContext(context.TODO(), "REFRESH MATERIALIZED VIEW pull_request_comments;")
+	require.NoError(err, "Error in refreshing view pull_request_comments")
+	err = db.QueryRow("select count(*) from pull_request_comments where repository_owner = $1 and repository_name = $2", oracle.Owner, oracle.Repository).Scan(&numOfPRReviewCommentsFromView)
+	require.NoError(err, "Error in retrieving view pull_request_comments")
 	if strict {
 		require.Equal(oracle.NumOfPRReviewComments, numOfPRReviewComments, "PR Review Comments")
+		// This is <= since in the view PRs are included with a body <> ''
+		require.LessOrEqual(oracle.NumOfPRComments+oracle.NumOfPRReviewComments, numOfPRReviewCommentsFromView, "PR Review Comments from View")
 	} else {
 		require.GreaterOrEqual(oracle.NumOfPRReviewComments, numOfPRReviewComments, "PR Review Comments")
+		require.GreaterOrEqual(oracle.NumOfPRComments+oracle.NumOfPRReviewComments, numOfPRReviewCommentsFromView, "PR Review Comments from View")
 	}
 }
 
 func checkRepo(require *require.Assertions, db *sql.DB, oracle testutils.RepositoryTestOracle, strict bool) {
 	var (
-		htmlurl   string
-		createdAt time.Time
-		private   bool
-		archived  bool
-		hasWiki   bool
-		topics    []string
+		htmlurl         string
+		createdAt       time.Time
+		private         bool
+		privateFromView bool
+		archived        bool
+		hasWiki         bool
+		topics          []string
 	)
-	err := db.QueryRow("select htmlurl, created_at, private, archived, has_wiki, topics from github_repositories where owner_login = $1 and name = $2", oracle.Owner, oracle.Repository).Scan(&htmlurl, &createdAt, &private, &archived, &hasWiki, pq.Array(&topics))
+	err := db.QueryRow("select htmlurl, created_at, private, archived, has_wiki, topics from github_repositories_versioned where owner_login = $1 and name = $2", oracle.Owner, oracle.Repository).Scan(&htmlurl, &createdAt, &private, &archived, &hasWiki, pq.Array(&topics))
 	require.NoError(err, "Error in retrieving repo")
 	require.Equal(oracle.URL, htmlurl)
 	require.Equal(oracle.CreatedAt, createdAt.UTC().String())
@@ -446,6 +484,11 @@ func checkRepo(require *require.Assertions, db *sql.DB, oracle testutils.Reposit
 	require.Equal(oracle.IsArchived, archived)
 	require.Equal(oracle.HasWiki, hasWiki)
 	require.ElementsMatch(oracle.Topics, topics)
+	_, err = db.ExecContext(context.TODO(), "REFRESH MATERIALIZED VIEW repositories;")
+	require.NoError(err, "Error in refreshing view repositories")
+	err = db.QueryRow("select private from repositories where owner = $1 and name = $2", oracle.Owner, oracle.Repository).Scan(&privateFromView)
+	require.NoError(err, "Error in retrieving view repositories")
+	require.Equal(oracle.IsPrivate, privateFromView)
 }
 
 // TestOnlineRepositoryDownloadWithDB Tests the download of known and fixed GitHub organization and stores it in a Postgresql DB
@@ -528,7 +571,7 @@ func (suite *DownloaderTestSuite) AfterTest(suiteName, testName string) {
 		suite.downloader.Cleanup(context.TODO(), 1)
 		// Check
 		var countOrgs int
-		err := suite.db.QueryRow("select count(*) from github_organizations").Scan(&countOrgs)
+		err := suite.db.QueryRow("select count(*) from github_organizations_versioned").Scan(&countOrgs)
 		suite.NoError(err, "Failed to count the orgs")
 		suite.Equal(0, countOrgs)
 	} else if testName == "TestOnlineRepositoryDownloadWithDB" || testName == "TestOfflineRepositoryDownloadWithDB" {
@@ -536,7 +579,7 @@ func (suite *DownloaderTestSuite) AfterTest(suiteName, testName string) {
 		suite.downloader.Cleanup(context.TODO(), 1)
 		// Check
 		var countRepos int
-		err := suite.db.QueryRow("select count(*) from github_repositories").Scan(&countRepos)
+		err := suite.db.QueryRow("select count(*) from github_repositories_versioned").Scan(&countRepos)
 		suite.NoError(err, "Failed to count the repos")
 		suite.Equal(0, countRepos)
 	}
