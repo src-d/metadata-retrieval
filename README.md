@@ -398,6 +398,21 @@ go test -coverpkg=./... -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 ```
 
+#### Recording oracles
+
+In order to record updated oracles for offline testing you can run for example from project root:
+
+```shell
+GITHUB_TOKEN=<xxx> go run examples/cmd/testing/*.go -repo=gitbase -org=src-d -happy=true
+````
+
+the options are:
+
+```
+      -repo=     The repository to crawl and store
+      -org=      The organization to crawl and store
+      -happy=    boolean, whether you want to record a happy crawl or errors in crawling (false)
+```
 
 ## Contribute
 
